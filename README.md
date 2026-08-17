@@ -107,9 +107,15 @@ Local_Database_QA/
 ├── requirements.txt            # Dependencies list (Flask, ChromaDB, SentenceTransformers, Pandas, OpenPyXL)
 ├── .gitignore                  # Git exclusion rules for venv, cache, and vector databases
 ├── README.md                   # System documentation & setup guide
-├── prepare_pilot_documents.py  # Pilot test suite document generator & indexer
+├── create_sample_pilot_files.py# Generator script for sample pilot test suite
+├── prepare_pilot_documents.py  # Pilot test suite document indexer
 ├── test_sql_nosql_demo.py      # Automated SQL, NoSQL & Excel verification suite
 ├── benchmark_excel_formats.py  # Excel embedding benchmark evaluation script
+├── sample_pilot_documents/     # 📂 Sample Files for Pilot Testing
+│   ├── Official_Enterprise_Policy.md  # Policy document (.md)
+│   ├── Training_Venue_Schedule.xlsx   # Training schedule spreadsheet (.xlsx)
+│   ├── company_records.db             # SQL Relational Database (.db)
+│   └── users_nosql.json               # NoSQL Document Collection (.json)
 ├── src/                        # Core Application Modules
 │   ├── ingest.py               # Multi-Format Extractor & Header-Preserving Chunker
 │   ├── embeddings.py           # SentenceTransformer vector embedding generator
