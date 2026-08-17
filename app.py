@@ -26,7 +26,7 @@ from flask import (
 # Ensure project directory is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from src.config import DOCUMENTS_DIR, EMBEDDING_MODEL_NAME, OLLAMA_BASE_URL
+from src.config import DOCUMENTS_DIR, EMBEDDING_MODEL_NAME, OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL
 from src.ingest import extract_pages, chunk_pages, file_hash
 from src.embeddings import embed_documents, embed_query
 from src.vectorstore import (
@@ -70,7 +70,7 @@ def index():
     db_stats = stats()
     models = list_ollama_models()
     query = request.args.get('q', '').strip()
-    selected_model = request.args.get('model', models[0] if models else '')
+    selected_model = request.args.get('model', DEFAULT_OLLAMA_MODEL if DEFAULT_OLLAMA_MODEL in models else (models[0] if models else DEFAULT_OLLAMA_MODEL))
     selected_sources = request.args.getlist('sources')
     mode = request.args.get('mode', 'rag')  # 'rag', 'direct', 'search_only'
     top_k = request.args.get('top_k', 4, type=int)

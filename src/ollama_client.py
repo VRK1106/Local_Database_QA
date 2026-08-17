@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import requests
 from typing import Generator
-from src.config import OLLAMA_BASE_URL
+from src.config import OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL
 
 
 import time
@@ -17,7 +17,7 @@ _health_cache_time = 0.0
 
 
 def list_ollama_models() -> list[str]:
-    """Query local Ollama server and return list of available model names (cached for 30s)."""
+    """Query local Ollama server and return list of available model names (cached for 30s) with DEFAULT_OLLAMA_MODEL first."""
     global _models_cache, _models_cache_time
     now = time.time()
     if _models_cache is not None and (now - _models_cache_time) < 30.0:
@@ -30,13 +30,17 @@ def list_ollama_models() -> list[str]:
             data = resp.json()
             models = [m.get("name") for m in data.get("models", []) if m.get("name")]
             if models:
-                _models_cache = sorted(models)
+                sorted_models = sorted(models)
+                # Ensure DEFAULT_OLLAMA_MODEL or qwen2.5-coder is placed first if present
+                pref_matches = [m for m in sorted_models if DEFAULT_OLLAMA_MODEL in m or "qwen2.5-coder" in m]
+                other_models = [m for m in sorted_models if m not in pref_matches]
+                _models_cache = pref_matches + other_models
                 _models_cache_time = now
                 return _models_cache
     except Exception:
         pass
 
-    fallback = ["llama3:latest", "mistral:latest", "gemma:7b", "phi3:latest"]
+    fallback = [DEFAULT_OLLAMA_MODEL, "qwen2.5-coder:latest", "llama3:latest", "mistral:latest", "gemma:7b", "phi3:latest"]
     _models_cache = fallback
     _models_cache_time = now
     return fallback
