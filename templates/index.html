@@ -798,6 +798,11 @@
                 isListening = false;
                 alert("Microphone Access Blocked!\n\nPlease click the lock/tune icon on the left side of your browser address bar (next to http://127.0.0.1:5000) and set Microphone to ALLOW.");
                 stopListening();
+            } else if (event.error === 'network') {
+                autoRestart = false;
+                isListening = false;
+                alert("Network Error: The browser's native Speech-to-Text requires an active internet connection.\n\nSince this is an offline system, please use your operating system's built-in offline voice typing (e.g., press Windows Key + H on Windows) while focused on the text box.");
+                stopListening();
             }
         };
 
