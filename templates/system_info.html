@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}System Status - Local Database QA System{% endblock %}
+{% block header_title %}Local Diagnostics & Model Monitor{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+    <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; margin-bottom: 20px;">
+        <i class="fa-solid fa-server" style="color: var(--accent-cyan);"></i> Local Infrastructure Status
+    </h3>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+        
+        <!-- Ollama Status -->
+        <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid var(--bg-card-border); border-radius: var(--radius-md); padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-weight: 600; font-size: 15px;"><i class="fa-solid fa-robot" style="color: var(--accent-purple);"></i> Ollama Service</span>
+                {% if ollama_ok %}
+                    <span class="status-badge online"><span class="status-dot"></span> Connected</span>
+                {% else %}
+                    <span class="status-badge offline"><span class="status-dot"></span> Not Reachable</span>
+                {% endif %}
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted);">
+                Endpoint: <code>{{ ollama_url }}</code>
+            </div>
+        </div>
+
+        <!-- ChromaDB Status -->
+        <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid var(--bg-card-border); border-radius: var(--radius-md); padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-weight: 600; font-size: 15px;"><i class="fa-solid fa-database" style="color: var(--accent-cyan);"></i> ChromaDB Vector Engine</span>
+                <span class="status-badge online"><span class="status-dot"></span> Active</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted);">
+                Total Vectors: <strong>{{ db_stats.total_chunks }}</strong> | Collection: <strong>local_qa_collection</strong>
+            </div>
+        </div>
+
+        <!-- Embedding Model -->
+        <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid var(--bg-card-border); border-radius: var(--radius-md); padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <span style="font-weight: 600; font-size: 15px;"><i class="fa-solid fa-network-wired" style="color: var(--accent-emerald);"></i> Local Embedding Model</span>
+                <span class="status-badge online"><span class="status-dot"></span> Loaded</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted);">
+                Model: <code>{{ embedding_model }}</code> (384d L2 Normalized)
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Installed Models Table -->
+<div class="glass-card">
+    <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; margin-bottom: 16px;">
+        <i class="fa-solid fa-microchip" style="color: var(--accent-purple);"></i> Installed Local Ollama Models ({{ models|length }})
+    </h3>
+
+    {% if models %}
+        <table class="file-table" style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Model Tag</th>
+                    <th>Status</th>
+                    <th>Capabilities</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in models %}
+                    <tr>
+                        <td><strong>{{ m }}</strong></td>
+                        <td><span class="status-badge online"><i class="fa-solid fa-check"></i> Ready</span></td>
+                        <td>Local Generation & RAG Context Ingestion</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div style="padding: 20px; color: var(--text-muted); font-size: 14px;">
+            No Ollama models detected. Ensure Ollama is running (`ollama serve`) and pull a model using <code>ollama pull llama3</code>.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

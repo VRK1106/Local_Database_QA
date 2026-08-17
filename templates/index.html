@@ -1,0 +1,883 @@
+{% extends "base.html" %}
+
+{% block title %}Q&A Studio - Local Database QA System{% endblock %}
+{% block header_title %}Local Q&A Studio{% endblock %}
+
+{% block extra_head %}
+<style>
+    .qa-container {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 24px;
+    }
+
+    .query-box {
+        background: var(--bg-card);
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        backdrop-filter: blur(16px);
+        margin-bottom: 24px;
+    }
+
+    .mode-selector {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .mode-btn {
+        flex: 1;
+        padding: 12px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--bg-card-border);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--text-muted);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all 0.2s ease;
+    }
+
+    .mode-btn.active {
+        background: rgba(6, 182, 212, 0.15);
+        color: var(--accent-cyan);
+        border-color: var(--accent-cyan);
+        box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+    }
+
+    .query-input-wrapper {
+        position: relative;
+        display: flex;
+        gap: 12px;
+    }
+
+    .query-textarea {
+        flex: 1;
+        min-height: 90px;
+        resize: vertical;
+        padding: 16px;
+        font-family: inherit;
+        border-radius: var(--radius-md);
+        background: var(--bg-input);
+        border: 1px solid var(--bg-card-border);
+        color: var(--text-main);
+        font-size: 15px;
+    }
+
+    .send-btn {
+        padding: 0 28px;
+        height: 90px;
+        background: var(--gradient-primary);
+        border: none;
+        border-radius: var(--radius-md);
+        color: #fff;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        box-shadow: 0 4px 20px rgba(6, 182, 212, 0.35);
+        transition: all 0.2s ease;
+    }
+
+    .send-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(6, 182, 212, 0.5);
+    }
+
+    .send-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    /* Output Stream Section */
+    .answer-card {
+        background: var(--bg-card);
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        margin-bottom: 24px;
+        position: relative;
+    }
+
+    .answer-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--bg-card-border);
+    }
+
+    .answer-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--accent-cyan);
+    }
+
+    /* Rich Markdown Typography & Formatting */
+    .answer-body {
+        font-size: 15px;
+        line-height: 1.7;
+        color: #e2e8f0;
+        min-height: 60px;
+    }
+
+    .answer-body p {
+        margin-bottom: 12px;
+    }
+
+    .answer-body strong, .answer-body b {
+        color: var(--accent-cyan);
+        font-weight: 700;
+        background: rgba(6, 182, 212, 0.12);
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid rgba(6, 182, 212, 0.25);
+    }
+
+    .answer-body h1, .answer-body h2, .answer-body h3, .answer-body h4 {
+        font-family: 'Outfit', sans-serif;
+        color: #fff;
+        margin: 16px 0 8px 0;
+    }
+
+    .answer-body ul, .answer-body ol {
+        margin: 10px 0 14px 24px;
+    }
+
+    .answer-body li {
+        margin-bottom: 6px;
+    }
+
+    .answer-body code {
+        font-family: 'Consolas', 'Fira Code', monospace;
+        background: #1e293b;
+        color: #38bdf8;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .answer-body pre {
+        background: #0f172a;
+        padding: 16px;
+        border-radius: var(--radius-md);
+        overflow-x: auto;
+        border: 1px solid var(--bg-card-border);
+        margin: 14px 0;
+    }
+
+    .answer-body pre code {
+        background: none;
+        padding: 0;
+        border: none;
+        color: #f1f5f9;
+    }
+
+    .answer-body blockquote {
+        border-left: 4px solid var(--accent-purple);
+        padding-left: 14px;
+        color: var(--text-muted);
+        font-style: italic;
+        margin: 12px 0;
+    }
+
+    .answer-meta {
+        margin-top: 16px;
+        font-size: 12px;
+        color: var(--text-muted);
+        display: flex;
+        gap: 16px;
+    }
+
+    /* Citation Cards */
+    .citation-card {
+        background: rgba(30, 41, 59, 0.5);
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-md);
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: border-color 0.2s ease;
+    }
+
+    .citation-card:hover {
+        border-color: var(--accent-cyan);
+    }
+
+    .citation-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .citation-score {
+        background: rgba(6, 182, 212, 0.15);
+        color: var(--accent-cyan);
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+    }
+
+    .citation-text {
+        font-size: 13px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        max-height: 100px;
+        overflow-y: auto;
+    }
+
+    /* Options Panel (Right Column) */
+    .options-panel {
+        background: var(--bg-card);
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        height: fit-content;
+    }
+
+    .panel-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .form-group {
+        margin-bottom: 16px;
+    }
+
+    .form-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .doc-filter-list {
+        max-height: 180px;
+        overflow-y: auto;
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-md);
+        padding: 8px;
+        background: var(--bg-input);
+    }
+
+    .doc-filter-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        font-size: 13px;
+        color: var(--text-main);
+        cursor: pointer;
+    }
+
+    .doc-filter-item input {
+        accent-color: var(--accent-cyan);
+    }
+
+    .mic-btn {
+        background: rgba(6, 182, 212, 0.15);
+        border: 1px solid var(--accent-cyan);
+        color: var(--accent-cyan);
+        padding: 10px 14px;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .mic-btn:hover {
+        background: var(--accent-cyan);
+        color: #000;
+    }
+
+    .mic-btn.recording {
+        background: rgba(244, 63, 94, 0.3) !important;
+        border-color: var(--accent-rose) !important;
+        color: var(--accent-rose) !important;
+        animation: pulse-red 1.5s infinite;
+    }
+
+    @keyframes pulse-red {
+        0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+    }
+
+    .cursor-blink::after {
+        content: '▋';
+        animation: blink 1s infinite;
+        color: var(--accent-cyan);
+    }
+
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="qa-container">
+    <!-- Left Column: Query Input & Answer Output -->
+    <div class="left-col">
+        
+        <!-- Query Box -->
+        <form id="qa-form" class="query-box" onsubmit="handleQuerySubmit(event)">
+            <input type="hidden" name="mode" id="selected-mode" value="{{ mode }}">
+
+            <div class="mode-selector">
+                <button type="button" class="mode-btn {% if mode == 'rag' %}active{% endif %}" onclick="setMode('rag', event)">
+                    <i class="fa-solid fa-brain"></i> RAG (Vector DB + Ollama)
+                </button>
+                <button type="button" class="mode-btn {% if mode == 'direct' %}active{% endif %}" onclick="setMode('direct', event)">
+                    <i class="fa-solid fa-robot"></i> Direct Ollama Chat
+                </button>
+                <button type="button" class="mode-btn {% if mode == 'search_only' %}active{% endif %}" onclick="setMode('search_only', event)">
+                    <i class="fa-solid fa-magnifying-glass"></i> Vector Search Only
+                </button>
+            </div>
+
+            <!-- Voice Activity Banner & Volume Level Bar -->
+            <div id="voice-status-banner" style="display: none; padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; margin-bottom: 12px; transition: all 0.3s ease;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span id="voice-status-text">Listening...</span>
+                    <span style="font-size: 11px; opacity: 0.8;" id="volume-val">Mic Input: 0%</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden;">
+                    <div id="mic-volume-bar" style="width: 0%; height: 100%; background: var(--accent-cyan); transition: width 0.05s linear;"></div>
+                </div>
+            </div>
+
+            <div class="query-input-wrapper">
+                <textarea name="q" id="query-input" class="query-textarea" placeholder="Ask any question about your local database documents..." required>{{ query }}</textarea>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoiceSearch()" title="Voice Query (Speech-to-Text)">
+                        <i class="fa-solid fa-microphone" id="mic-icon"></i>
+                    </button>
+                    <button type="submit" id="submit-btn" class="send-btn">
+                        <i class="fa-solid fa-paper-plane" id="btn-icon"></i>
+                        <span id="btn-text">Ask AI</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Answer / Stream Output Section -->
+        <div class="answer-card" id="answer-card" style="display: {% if query %}block{% else %}none{% endif %};">
+            <div class="answer-header">
+                <div class="answer-title">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> 
+                    <span id="card-mode-title">{% if mode == 'rag' %}RAG Answer from Local Database{% elif mode == 'direct' %}Direct Ollama Response{% else %}Vector Retrieval Matches{% endif %}</span>
+                </div>
+                <span class="status-badge online">
+                    <i class="fa-solid fa-microchip"></i> <span id="active-model-name">{{ selected_model }}</span>
+                </span>
+            </div>
+
+            <div class="answer-body" id="answer-text">
+                {% if answer %}
+                    <!-- Rendered markdown via script -->
+                    <div id="raw-answer-content" style="display:none;">{{ answer }}</div>
+                {% endif %}
+            </div>
+
+            <div class="answer-meta" id="answer-meta">
+                {% if retrieval_time %}
+                    <span><i class="fa-solid fa-stopwatch"></i> Vector Retrieval: <strong>{{ retrieval_time }}s</strong></span>
+                {% endif %}
+                {% if generation_time %}
+                    <span><i class="fa-solid fa-bolt"></i> LLM Generation: <strong>{{ generation_time }}s</strong></span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Retrieved Source Citation Cards Container -->
+        <div class="glass-card" id="citations-container" style="display: {% if results %}block{% else %}none{% endif %};">
+            <div class="panel-title">
+                <i class="fa-solid fa-quote-left"></i> Retrieved Database Citations (<span id="citation-count">{{ results|length if results else 0 }}</span> Passages)
+            </div>
+
+            <div id="citation-list">
+                {% if results %}
+                    {% for hit in results %}
+                        <div class="citation-card">
+                            <div class="citation-header">
+                                <div>
+                                    <i class="fa-solid fa-file-lines" style="color: var(--accent-cyan);"></i> 
+                                    <strong>{{ hit.source }}</strong> (Page {{ hit.page }})
+                                </div>
+                                <span class="citation-score">Relevance: {{ (hit.score * 100)|round(1) }}%</span>
+                            </div>
+                            <div class="citation-text">
+                                "{{ hit.text }}"
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Settings & Filters -->
+    <div class="right-col">
+        <div class="options-panel">
+            <div class="panel-title">
+                <i class="fa-solid fa-sliders"></i> QA Parameters
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Local Ollama Model</label>
+                <select name="model" id="model-select" class="form-select">
+                    {% for m in available_models %}
+                        <option value="{{ m }}" {% if m == selected_model %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                    <span><i class="fa-solid fa-volume-high" style="color: var(--accent-cyan);"></i> Voice Readout (TTS)</span>
+                    <input type="checkbox" id="tts-checkbox" style="accent-color: var(--accent-cyan); width: 16px; height: 16px; cursor: pointer;">
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Top-K Passages</label>
+                <select name="top_k" id="top-k-select" class="form-select">
+                    <option value="2" {% if top_k == 2 %}selected{% endif %}>2 Passages</option>
+                    <option value="4" {% if top_k == 4 or not top_k %}selected{% endif %}>4 Passages (Default)</option>
+                    <option value="6" {% if top_k == 6 %}selected{% endif %}>6 Passages</option>
+                    <option value="8" {% if top_k == 8 %}selected{% endif %}>8 Passages</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Filter by Document Source</label>
+                <div class="doc-filter-list">
+                    {% if db_stats.source_names %}
+                        {% for src in db_stats.source_names %}
+                            <label class="doc-filter-item">
+                                <input type="checkbox" name="sources" value="{{ src }}" class="doc-source-checkbox" {% if src in selected_sources %}checked{% endif %}>
+                                <span class="text-truncate">{{ src }}</span>
+                            </label>
+                        {% endfor %}
+                    {% else %}
+                        <div style="font-size: 12px; color: var(--text-muted); padding: 8px;">
+                            No documents indexed yet. Upload files in Document Manager.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Initialize marked.js configuration
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({
+            gfm: true,
+            breaks: true
+        });
+    }
+
+    // Render initial answer markdown if present
+    document.addEventListener("DOMContentLoaded", function() {
+        const rawContent = document.getElementById('raw-answer-content');
+        const answerTextDiv = document.getElementById('answer-text');
+        if (rawContent && rawContent.textContent.trim()) {
+            if (typeof marked !== 'undefined') {
+                answerTextDiv.innerHTML = marked.parse(rawContent.textContent.trim());
+            } else {
+                answerTextDiv.textContent = rawContent.textContent.trim();
+            }
+        }
+    });
+
+    function setMode(mode, evt) {
+        document.getElementById('selected-mode').value = mode;
+        document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+        evt.currentTarget.classList.add('active');
+    }
+
+    async function handleQuerySubmit(evt) {
+        evt.preventDefault();
+        
+        const queryInput = document.getElementById('query-input');
+        const query = queryInput.value.trim();
+        if (!query) return;
+
+        const mode = document.getElementById('selected-mode').value;
+        const model = document.getElementById('model-select').value;
+        const topK = parseInt(document.getElementById('top-k-select').value) || 4;
+        
+        const selectedSources = [];
+        document.querySelectorAll('.doc-source-checkbox:checked').forEach(cb => {
+            selectedSources.push(cb.value);
+        });
+
+        // UI Updates for Streaming State
+        const submitBtn = document.getElementById('submit-btn');
+        const btnIcon = document.getElementById('btn-icon');
+        const btnText = document.getElementById('btn-text');
+        const answerCard = document.getElementById('answer-card');
+        const answerTextDiv = document.getElementById('answer-text');
+        const answerMeta = document.getElementById('answer-meta');
+        const activeModelSpan = document.getElementById('active-model-name');
+        const citationsContainer = document.getElementById('citations-container');
+        const citationList = document.getElementById('citation-list');
+        const citationCount = document.getElementById('citation-count');
+
+        submitBtn.disabled = true;
+        btnIcon.className = "fa-solid fa-spinner fa-spin";
+        btnText.textContent = "Streaming...";
+
+        activeModelSpan.textContent = model;
+        answerCard.style.display = "block";
+        answerTextDiv.innerHTML = '<span class="cursor-blink">Searching local database & starting Ollama model...</span>';
+        answerMeta.innerHTML = '';
+        citationsContainer.style.display = "none";
+        citationList.innerHTML = '';
+
+        const startTime = performance.now();
+        let accumulatedMarkdown = "";
+
+        try {
+            const response = await fetch('/api/stream_query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: query,
+                    mode: mode,
+                    model: model,
+                    top_k: topK,
+                    sources: selectedSources
+                })
+            });
+
+            if (!response.ok) {
+                answerTextDiv.innerHTML = `<span style="color: var(--accent-rose);">Error connecting to streaming API (Status ${response.status})</span>`;
+                submitBtn.disabled = false;
+                btnIcon.className = "fa-solid fa-paper-plane";
+                btnText.textContent = "Ask AI";
+                return;
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split("\n\n");
+                buffer = lines.pop(); // Keep partial line in buffer
+
+                for (const line of lines) {
+                    if (line.startsWith("data: ")) {
+                        try {
+                            const data = JSON.parse(line.replace("data: ", ""));
+                            
+                            // Context Citations Event
+                            if (data.type === 'context') {
+                                if (data.citations && data.citations.length > 0) {
+                                    citationsContainer.style.display = "block";
+                                    citationCount.textContent = data.citations.length;
+                                    
+                                    citationList.innerHTML = data.citations.map(c => `
+                                        <div class="citation-card">
+                                            <div class="citation-header">
+                                                <div>
+                                                    <i class="fa-solid fa-file-lines" style="color: var(--accent-cyan);"></i> 
+                                                    <strong>${c.source}</strong> (Page ${c.page})
+                                                </div>
+                                                <span class="citation-score">Relevance: ${(c.score * 100).toFixed(1)}%</span>
+                                            </div>
+                                            <div class="citation-text">
+                                                "${c.text}"
+                                            </div>
+                                        </div>
+                                    `).join('');
+                                }
+                            }
+                            
+                            // Token Stream Event
+                            if (data.token) {
+                                accumulatedMarkdown += data.token;
+                                if (typeof marked !== 'undefined') {
+                                    answerTextDiv.innerHTML = marked.parse(accumulatedMarkdown) + '<span class="cursor-blink"></span>';
+                                } else {
+                                    answerTextDiv.textContent = accumulatedMarkdown;
+                                }
+                            }
+
+                            if (data.error) {
+                                answerTextDiv.innerHTML += `<p style="color: var(--accent-rose);">Error: ${data.error}</p>`;
+                            }
+                        } catch (err) {
+                            console.error("Parse error:", err);
+                        }
+                    }
+                }
+            }
+
+            // Final formatting pass (remove cursor blink)
+            const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            if (typeof marked !== 'undefined') {
+                answerTextDiv.innerHTML = marked.parse(accumulatedMarkdown);
+            } else {
+                answerTextDiv.textContent = accumulatedMarkdown;
+            }
+
+            answerMeta.innerHTML = `<span><i class="fa-solid fa-bolt"></i> Stream Completed in <strong>${totalTime}s</strong></span>`;
+
+            // Voice Readout (TTS) if enabled
+            if (accumulatedMarkdown) {
+                speakAnswerText(accumulatedMarkdown);
+            }
+
+        } catch (err) {
+            console.error("Stream error:", err);
+            answerTextDiv.innerHTML = `<span style="color: var(--accent-rose);">Streaming failed: ${err.message}</span>`;
+        } finally {
+            submitBtn.disabled = false;
+            btnIcon.className = "fa-solid fa-paper-plane";
+            btnText.textContent = "Ask AI";
+        }
+    }
+
+    // Audio Tone Feedback Helper (Zero external files)
+    function playAudioTone(freq, duration) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.value = freq;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            gain.gain.value = 0.08;
+            osc.start();
+            setTimeout(() => { osc.stop(); ctx.close(); }, duration);
+        } catch(e) {}
+    }
+
+    // Audio Input Hardware Volume Meter
+    let audioStream = null;
+    let audioCtx = null;
+    let audioAnimFrame = null;
+
+    async function startAudioMeter() {
+        try {
+            audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            const source = audioCtx.createMediaStreamSource(audioStream);
+            source.connect(analyser);
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            function updateMeter() {
+                if (!isListening) return;
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                let avg = sum / dataArray.length;
+                let volPct = Math.min(100, Math.round((avg / 128) * 100));
+
+                const volBar = document.getElementById('mic-volume-bar');
+                const volVal = document.getElementById('volume-val');
+                if (volBar) volBar.style.width = volPct + '%';
+                if (volVal) volVal.textContent = 'Mic Level: ' + volPct + '%';
+
+                audioAnimFrame = requestAnimationFrame(updateMeter);
+            }
+            updateMeter();
+        } catch(err) {
+            console.warn("Could not start mic volume meter:", err);
+        }
+    }
+
+    function stopAudioMeter() {
+        if (audioAnimFrame) cancelAnimationFrame(audioAnimFrame);
+        if (audioStream) {
+            audioStream.getTracks().forEach(track => track.stop());
+            audioStream = null;
+        }
+        if (audioCtx) {
+            try { audioCtx.close(); } catch(e) {}
+            audioCtx = null;
+        }
+        const volBar = document.getElementById('mic-volume-bar');
+        const volVal = document.getElementById('volume-val');
+        if (volBar) volBar.style.width = '0%';
+        if (volVal) volVal.textContent = 'Mic Input: 0%';
+    }
+
+    // Voice Query (Speech-to-Text) Implementation
+    let recognition = null;
+    let isListening = false;
+    let autoRestart = true;
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+        recognition.lang = window.navigator.language || 'en-IN';
+
+        recognition.onstart = function() {
+            isListening = true;
+            document.getElementById('mic-btn').classList.add('recording');
+            document.getElementById('mic-icon').className = 'fa-solid fa-microphone-lines fa-bounce';
+            
+            const banner = document.getElementById('voice-status-banner');
+            const bannerText = document.getElementById('voice-status-text');
+            if (banner && bannerText) {
+                banner.style.display = 'block';
+                banner.style.background = 'rgba(6, 182, 212, 0.15)';
+                banner.style.border = '1px solid var(--accent-cyan)';
+                banner.style.color = 'var(--accent-cyan)';
+                bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>VOICE ENGINE LISTENING:</strong> Speak your question now...';
+            }
+            playAudioTone(600, 150); // Start tone
+            startAudioMeter(); // Start live volume meter
+        };
+
+        recognition.onresult = function(event) {
+            let text = '';
+            for (let i = 0; i < event.results.length; ++i) {
+                text += event.results[i][0].transcript + ' ';
+            }
+            
+            const cleanText = text.trim();
+            if (cleanText) {
+                const queryInput = document.getElementById('query-input');
+                queryInput.value = cleanText;
+                
+                const banner = document.getElementById('voice-status-banner');
+                const bannerText = document.getElementById('voice-status-text');
+                if (banner && bannerText) {
+                    banner.style.background = 'rgba(16, 185, 129, 0.2)';
+                    banner.style.border = '1px solid var(--accent-emerald)';
+                    banner.style.color = '#34d399';
+                    bannerText.innerHTML = `<i class="fa-solid fa-volume-high"></i> <strong>Hearing Voice:</strong> "${cleanText}"`;
+                }
+            }
+        };
+
+        recognition.onerror = function(event) {
+            console.warn("Speech recognition error:", event.error);
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                autoRestart = false;
+                isListening = false;
+                alert("Microphone Access Blocked!\n\nPlease click the lock/tune icon on the left side of your browser address bar (next to http://127.0.0.1:5000) and set Microphone to ALLOW.");
+                stopListening();
+            }
+        };
+
+        recognition.onend = function() {
+            if (isListening && autoRestart) {
+                // Auto restart immediately to keep mic active continuously
+                setTimeout(() => {
+                    if (isListening) {
+                        try { recognition.start(); } catch(e) {}
+                    }
+                }, 150);
+            } else {
+                stopListening();
+            }
+        };
+    }
+
+    function toggleVoiceSearch() {
+        if (!recognition) {
+            alert("Voice Speech Recognition is supported in Chrome, Edge, and Brave browsers.");
+            return;
+        }
+        if (isListening) {
+            isListening = false;
+            autoRestart = false;
+            try { recognition.stop(); } catch(e) {}
+            stopListening();
+        } else {
+            autoRestart = true;
+            try { recognition.start(); } catch(e) {}
+        }
+    }
+
+    function stopListening() {
+        isListening = false;
+        stopAudioMeter();
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) micBtn.classList.remove('recording');
+        const micIcon = document.getElementById('mic-icon');
+        if (micIcon) micIcon.className = 'fa-solid fa-microphone';
+
+        const banner = document.getElementById('voice-status-banner');
+        const bannerText = document.getElementById('voice-status-text');
+        if (banner && bannerText && document.getElementById('query-input').value.trim()) {
+            banner.style.display = 'block';
+            banner.style.background = 'rgba(16, 185, 129, 0.15)';
+            banner.style.border = '1px solid var(--accent-emerald)';
+            banner.style.color = '#34d399';
+            bannerText.innerHTML = '<i class="fa-solid fa-circle-check"></i> <strong>Voice Captured & Transcribed!</strong> Click <strong>Ask AI</strong> to query Ollama.';
+            setTimeout(() => { banner.style.display = 'none'; }, 6000);
+        } else if (banner) {
+            banner.style.display = 'none';
+        }
+
+        playAudioTone(400, 150); // Stop tone
+    }
+
+    // Voice Readout (Text-to-Speech) Implementation
+    function speakAnswerText(markdownText) {
+        if (!('speechSynthesis' in window)) return;
+        const ttsEnabled = document.getElementById('tts-checkbox')?.checked;
+        if (!ttsEnabled) return;
+
+        window.speechSynthesis.cancel(); // Stop prior audio
+        const cleanText = markdownText.replace(/[\*\_`#\[\]\(\)]/g, '').replace(/<[^>]*>/g, '');
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+    }
+</script>
+{% endblock %}

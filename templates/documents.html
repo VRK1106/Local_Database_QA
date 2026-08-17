@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Document Manager - Local Database QA System{% endblock %}
+{% block header_title %}Document Ingestion & Vector Database Hub{% endblock %}
+
+{% block extra_head %}
+<style>
+    .doc-grid {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 24px;
+    }
+
+    .upload-dropzone {
+        border: 2px dashed var(--accent-cyan);
+        background: rgba(6, 182, 212, 0.05);
+        border-radius: var(--radius-lg);
+        padding: 32px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .upload-dropzone:hover {
+        background: rgba(6, 182, 212, 0.12);
+        border-color: #fff;
+    }
+
+    .upload-icon {
+        font-size: 40px;
+        color: var(--accent-cyan);
+        margin-bottom: 12px;
+    }
+
+    .file-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+    }
+
+    .file-table th, .file-table td {
+        padding: 14px 16px;
+        text-align: left;
+        border-bottom: 1px solid var(--bg-card-border);
+    }
+
+    .file-table th {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        background: rgba(15, 23, 42, 0.5);
+    }
+
+    .file-table td {
+        font-size: 14px;
+    }
+
+    .action-btn {
+        padding: 6px 12px;
+        border-radius: var(--radius-md);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .chunk-modal {
+        background: var(--bg-card);
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        margin-top: 24px;
+    }
+
+    .chunk-list {
+        max-height: 400px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 16px;
+    }
+
+    .chunk-box {
+        background: var(--bg-input);
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-md);
+        padding: 14px;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .chunk-meta {
+        font-size: 11px;
+        color: var(--accent-cyan);
+        margin-bottom: 6px;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="doc-grid">
+    <!-- Left Column: Upload Box & Stats -->
+    <div class="left-col">
+        <div class="glass-card">
+            <h3 style="font-family: 'Outfit', sans-serif; font-size: 16px; margin-bottom: 16px;">
+                <i class="fa-solid fa-cloud-arrow-up" style="color: var(--accent-cyan);"></i> Ingest Local Documents
+            </h3>
+
+            <form action="{{ url_for('api_upload') }}" method="POST" enctype="multipart/form-data" id="upload-form">
+                <div class="upload-dropzone" onclick="document.getElementById('file-input').click()">
+                    <div class="upload-icon"><i class="fa-solid fa-database"></i></div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">Click or Drag & Drop Database & Text Files</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">Supports PDF, DOCX, TXT, MD, CSV, SQL (.db, .sqlite, .sql), NoSQL (.json, .jsonl)</div>
+                    <input type="file" name="files" id="file-input" multiple style="display: none;" onchange="document.getElementById('upload-form').submit()">
+                </div>
+            </form>
+        </div>
+
+        <div class="glass-card">
+            <h3 style="font-family: 'Outfit', sans-serif; font-size: 16px; margin-bottom: 16px; color: var(--accent-rose);">
+                <i class="fa-solid fa-triangle-exclamation"></i> Vector Store Reset
+            </h3>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                Wipe all indexed chunks and documents permanently from local storage.
+            </p>
+            <form action="{{ url_for('api_reset_db') }}" method="POST" onsubmit="return confirm('Are you sure you want to wipe the entire vector database?')">
+                <button type="submit" class="btn btn-danger" style="width: 100%;">
+                    <i class="fa-solid fa-trash-can"></i> Reset Local Vector DB
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right Column: Document List -->
+    <div class="right-col">
+        <div class="glass-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px;">
+                    <i class="fa-solid fa-database" style="color: var(--accent-cyan);"></i> Indexed Document Collection
+                </h3>
+                <span class="status-badge online">{{ db_stats.sources }} Documents</span>
+            </div>
+
+            {% if db_stats.source_details %}
+                <table class="file-table">
+                    <thead>
+                        <tr>
+                            <th>Document / DB Name</th>
+                            <th>Total Chunks</th>
+                            <th>Pages / Tables</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in db_stats.source_details %}
+                            <tr>
+                                <td>
+                                    {% if '.db' in doc.name.lower() or '.sqlite' in doc.name.lower() or '.sql' in doc.name.lower() %}
+                                        <span class="status-badge online" style="background: rgba(139, 92, 246, 0.2); color: #a78bfa; margin-right: 6px;"><i class="fa-solid fa-table"></i> SQL DB</span>
+                                    {% elif '.json' in doc.name.lower() or '.jsonl' in doc.name.lower() %}
+                                        <span class="status-badge online" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; margin-right: 6px;"><i class="fa-solid fa-code"></i> NoSQL DB</span>
+                                    {% else %}
+                                        <i class="fa-solid fa-file-lines" style="color: var(--accent-cyan); margin-right: 8px;"></i>
+                                    {% endif %}
+                                    <strong>{{ doc.name }}</strong>
+                                </td>
+                                <td>{{ doc.chunks }} chunks</td>
+                                <td>{{ doc.pages }} pages</td>
+                                <td>
+                                    <div style="display: flex; gap: 8px;">
+                                        <a href="{{ url_for('documents_page', inspect=doc.name) }}" class="action-btn" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);">
+                                            <i class="fa-solid fa-eye"></i> Inspect
+                                        </a>
+                                        <form action="{{ url_for('api_delete_doc') }}" method="POST" style="display: inline;" onsubmit="return confirm('Delete {{ doc.name }}?')">
+                                            <input type="hidden" name="source_name" value="{{ doc.name }}">
+                                            <button type="submit" class="action-btn" style="background: rgba(244, 63, 94, 0.15); color: #f87171;">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                    <i class="fa-solid fa-box-open" style="font-size: 40px; margin-bottom: 12px; display: block;"></i>
+                    No documents indexed in local database yet. Upload PDF/TXT files to start.
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Chunk Inspector Panel -->
+        {% if selected_doc %}
+            <div class="chunk-modal">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="font-family: 'Outfit', sans-serif; font-size: 16px; color: var(--accent-cyan);">
+                        <i class="fa-solid fa-magnifying-glass"></i> Inspecting Chunks: {{ selected_doc }} ({{ inspect_chunks|length }} Chunks)
+                    </h4>
+                    <a href="{{ url_for('documents_page') }}" style="color: var(--text-muted); text-decoration: none;"><i class="fa-solid fa-xmark"></i> Close</a>
+                </div>
+
+                <div class="chunk-list">
+                    {% for c in inspect_chunks %}
+                        <div class="chunk-box">
+                            <div class="chunk-meta">Chunk #{{ loop.index }} — Page {{ c.page }} (ID: {{ c.id }})</div>
+                            <div>{{ c.text }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
