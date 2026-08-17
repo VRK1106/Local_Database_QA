@@ -684,177 +684,29 @@
         }
     }
 
-    // Audio Input Hardware Volume Meter
-    let audioStream = null;
-    let audioCtx = null;
-    let audioAnimFrame = null;
-
-    async function startAudioMeter() {
-        if (audioCtx) return; // Prevent duplicate contexts if clicked rapidly
-        try {
-            audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 256;
-            const source = audioCtx.createMediaStreamSource(audioStream);
-            source.connect(analyser);
-
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            function updateMeter() {
-                if (!isListening) return;
-                analyser.getByteFrequencyData(dataArray);
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i];
-                }
-                let avg = sum / dataArray.length;
-                let volPct = Math.min(100, Math.round((avg / 128) * 100));
-
-                const volBar = document.getElementById('mic-volume-bar');
-                const volVal = document.getElementById('volume-val');
-                if (volBar) volBar.style.width = volPct + '%';
-                if (volVal) volVal.textContent = 'Mic Level: ' + volPct + '%';
-
-                audioAnimFrame = requestAnimationFrame(updateMeter);
-            }
-            updateMeter();
-        } catch(err) {
-            console.warn("Could not start mic volume meter:", err);
-        }
-    }
-
-    function stopAudioMeter() {
-        if (audioAnimFrame) cancelAnimationFrame(audioAnimFrame);
-        if (audioStream) {
-            audioStream.getTracks().forEach(track => track.stop());
-            audioStream = null;
-        }
-        if (audioCtx) {
-            try { audioCtx.close(); } catch(e) {}
-            audioCtx = null;
-        }
-        const volBar = document.getElementById('mic-volume-bar');
-        const volVal = document.getElementById('volume-val');
-        if (volBar) volBar.style.width = '0%';
-        if (volVal) volVal.textContent = 'Mic Input: 0%';
-    }
-
-    // Voice Query (Speech-to-Text) Implementation
-    let recognition = null;
-    let isListening = false;
-    let autoRestart = true;
-
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-        recognition.lang = window.navigator.language || 'en-IN';
-
-        recognition.onstart = function() {
-            isListening = true;
-            document.getElementById('mic-btn').classList.add('recording');
-            document.getElementById('mic-icon').className = 'fa-solid fa-microphone-lines fa-bounce';
-            
-            const banner = document.getElementById('voice-status-banner');
-            const bannerText = document.getElementById('voice-status-text');
-            if (banner && bannerText) {
-                banner.style.display = 'block';
-                banner.style.background = 'rgba(6, 182, 212, 0.15)';
-                banner.style.border = '1px solid var(--accent-cyan)';
-                banner.style.color = 'var(--accent-cyan)';
-                bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>VOICE ENGINE LISTENING:</strong> Speak your question now...';
-            }
-            startAudioMeter(); // Start live volume meter
-        };
-
-        recognition.onresult = function(event) {
-            let text = '';
-            for (let i = 0; i < event.results.length; ++i) {
-                text += event.results[i][0].transcript + ' ';
-            }
-            
-            const cleanText = text.trim();
-            if (cleanText) {
-                const queryInput = document.getElementById('query-input');
-                queryInput.value = cleanText;
-                
-                const banner = document.getElementById('voice-status-banner');
-                const bannerText = document.getElementById('voice-status-text');
-                if (banner && bannerText) {
-                    banner.style.background = 'rgba(16, 185, 129, 0.2)';
-                    banner.style.border = '1px solid var(--accent-emerald)';
-                    banner.style.color = '#34d399';
-                    bannerText.innerHTML = `<i class="fa-solid fa-volume-high"></i> <strong>Hearing Voice:</strong> "${cleanText}"`;
-                }
-            }
-        };
-
-        recognition.onerror = function(event) {
-            console.warn("Speech recognition error:", event.error);
-            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                autoRestart = false;
-                isListening = false;
-                alert("Microphone Access Blocked!\n\nPlease click the lock/tune icon on the left side of your browser address bar (next to http://127.0.0.1:5000) and set Microphone to ALLOW.");
-                stopListening();
-            } else if (event.error === 'network') {
-                autoRestart = false;
-                isListening = false;
-                alert("Network Error: The browser's native Speech-to-Text requires an active internet connection.\n\nSince this is an offline system, please use your operating system's built-in offline voice typing (e.g., press Windows Key + H on Windows) while focused on the text box.");
-                stopListening();
-            }
-        };
-
-        recognition.onend = function() {
-            if (isListening && autoRestart) {
-                // Auto restart immediately to keep mic active continuously
-                setTimeout(() => {
-                    if (isListening) {
-                        try { recognition.start(); } catch(e) {}
-                    }
-                }, 150);
-            } else {
-                stopListening();
-            }
-        };
-    }
-
+    // Voice Query (Offline OS-level Delegation)
     function toggleVoiceSearch() {
-        if (!recognition) {
-            alert("Voice Speech Recognition is supported in Chrome, Edge, and Brave browsers.");
-            return;
-        }
-        if (isListening) {
-            isListening = false;
-            autoRestart = false;
-            try { recognition.stop(); } catch(e) {}
-            stopListening();
-        } else {
-            autoRestart = true;
-            try { recognition.start(); } catch(e) {}
-        }
-    }
-
-    function stopListening() {
-        isListening = false;
-        stopAudioMeter();
-        const micBtn = document.getElementById('mic-btn');
-        if (micBtn) micBtn.classList.remove('recording');
-        const micIcon = document.getElementById('mic-icon');
-        if (micIcon) micIcon.className = 'fa-solid fa-microphone';
-
+        const queryInput = document.getElementById('query-input');
         const banner = document.getElementById('voice-status-banner');
         const bannerText = document.getElementById('voice-status-text');
-        if (banner && bannerText && document.getElementById('query-input').value.trim()) {
+        
+        // Focus the input box automatically
+        if (queryInput) {
+            queryInput.focus();
+        }
+
+        // Show the instruction banner
+        if (banner && bannerText) {
             banner.style.display = 'block';
-            banner.style.background = 'rgba(16, 185, 129, 0.15)';
-            banner.style.border = '1px solid var(--accent-emerald)';
-            banner.style.color = '#34d399';
-            bannerText.innerHTML = '<i class="fa-solid fa-circle-check"></i> <strong>Voice Captured & Transcribed!</strong> Click <strong>Ask AI</strong> to query Ollama.';
-            setTimeout(() => { banner.style.display = 'none'; }, 6000);
-        } else if (banner) {
-            banner.style.display = 'none';
+            banner.style.background = 'rgba(6, 182, 212, 0.15)';
+            banner.style.border = '1px solid var(--accent-cyan)';
+            banner.style.color = 'var(--accent-cyan)';
+            bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>OFFLINE VOICE ENGINE:</strong> Press <strong>Windows Key + H</strong> now to start typing with your voice.';
+            
+            // Auto-hide the banner after 8 seconds
+            setTimeout(() => {
+                banner.style.display = 'none';
+            }, 8000);
         }
     }
 
