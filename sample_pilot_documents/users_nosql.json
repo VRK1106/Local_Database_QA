@@ -1,0 +1,23 @@
+[
+  {
+    "user_id": "u_901",
+    "username": "alex_dev",
+    "role": "Lead Engineer",
+    "access_level": "Admin",
+    "status": "Active"
+  },
+  {
+    "user_id": "u_902",
+    "username": "priya_m",
+    "role": "Product Manager",
+    "access_level": "Standard",
+    "status": "Active"
+  },
+  {
+    "user_id": "u_903",
+    "username": "sam_cloud",
+    "role": "DevOps Specialist",
+    "access_level": "Admin",
+    "status": "Inactive"
+  }
+]

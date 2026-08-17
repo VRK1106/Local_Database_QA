@@ -1,24 +1,13 @@
 import sqlite3
 import json
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
+import pandas as pd
 from pathlib import Path
-from io import BytesIO
-from src.ingest import extract_pages, chunk_pages, file_hash
-from src.embeddings import embed_documents, embed_query
-from src.vectorstore import reset_collection, add_chunks, search, stats
 
-print("==================================================================")
-print("  PREPARING OFFICIAL PILOT DOCUMENTATION SUITE FOR DEMO & TESTING")
-print("==================================================================")
+sample_dir = Path('sample_pilot_documents')
+sample_dir.mkdir(parents=True, exist_ok=True)
 
-# 1. Reset vectorstore collection cleanly
-reset_collection()
-print("\n[+] Reset ChromaDB Vector Collection cleanly.")
-
-# 2. Create/Verify Official Enterprise Policy Markdown Document
-policy_path = Path('documents/Official_Enterprise_Policy.md')
+# 1. Enterprise Security Policy Markdown
+policy_path = sample_dir / 'Official_Enterprise_Policy.md'
 policy_text = """# Official Enterprise Information Technology & Security Policy
 
 ## Document Control
@@ -45,10 +34,9 @@ policy_text = """# Official Enterprise Information Technology & Security Policy
 - Hotel accommodation limit is capped at $200 USD per night for standard tier cities.
 """
 policy_path.write_text(policy_text, encoding='utf-8')
-print("[+] Created/Updated: Official_Enterprise_Policy.md")
 
-# 3. Create/Verify SQL Database (company_records.db)
-sql_path = Path('documents/company_records.db')
+# 2. SQLite Database
+sql_path = sample_dir / 'company_records.db'
 conn = sqlite3.connect(sql_path)
 cur = conn.cursor()
 cur.execute('CREATE TABLE IF NOT EXISTS employees (id INT, name TEXT, department TEXT, salary INT, project TEXT);')
@@ -58,38 +46,34 @@ cur.execute("INSERT INTO employees VALUES (102, 'Ananya Patel', 'Cloud Architect
 cur.execute("INSERT INTO employees VALUES (103, 'Vikram Malhotra', 'Data Science', 88000, 'Local Database QA');")
 conn.commit()
 conn.close()
-print("[+] Created/Updated: company_records.db (SQL Relational DB)")
 
-# 4. Create/Verify NoSQL Database (users_nosql.json)
-nosql_path = Path('documents/users_nosql.json')
+# 3. NoSQL JSON Profile Collection
+nosql_path = sample_dir / 'users_nosql.json'
 nosql_data = [
     {"user_id": "u_901", "username": "alex_dev", "role": "Lead Engineer", "access_level": "Admin", "status": "Active"},
     {"user_id": "u_902", "username": "priya_m", "role": "Product Manager", "access_level": "Standard", "status": "Active"},
     {"user_id": "u_903", "username": "sam_cloud", "role": "DevOps Specialist", "access_level": "Admin", "status": "Inactive"}
 ]
 nosql_path.write_text(json.dumps(nosql_data, indent=2), encoding='utf-8')
-print("[+] Created/Updated: users_nosql.json (NoSQL Document DB)")
 
-# 5. Ingest ALL official documents in sample_pilot_documents/ and documents/ into ChromaDB
-print("\n[+] Indexing all pilot source files into ChromaDB Vector Engine...")
-total_chunks_added = 0
+# 4. Excel Training Venue Schedule
+xlsx_path = sample_dir / 'Training_Venue_Schedule.xlsx'
+departments = ['AD', 'AD', 'CSE', 'CSE', 'ML', 'ECE']
+venues = ['III AD Classroom A', 'III AD Classroom B', 'III CSE A Classroom', 'CC LAB', 'HPC LAB', 'NMS LAB']
+rows = []
+for i in range(1, 61):
+    dept = departments[i % len(departments)]
+    venue = venues[i % len(venues)]
+    rows.append({
+        'slNo': i,
+        'Name': f'Student_{i}',
+        'Roll No': f'24{dept}{i:03d}',
+        'Dept': dept,
+        'Mobile': f'987654{i:04d}',
+        'Mail ID': f'student{i}@kpriet.ac.in',
+        'Venue': venue
+    })
+df = pd.DataFrame(rows)
+df.to_excel(xlsx_path, index=False)
 
-for target_dir in [Path('sample_pilot_documents'), Path('documents')]:
-    if not target_dir.exists():
-        continue
-    for doc_file in target_dir.iterdir():
-        if doc_file.is_file():
-            data = doc_file.read_bytes()
-            digest = file_hash(data)
-            pages = extract_pages(BytesIO(data), doc_file.name)
-            chunks = chunk_pages(pages, doc_file.name)
-            if chunks:
-                embeds = embed_documents([c['text'] for c in chunks])
-                added = add_chunks(chunks, embeds, digest)
-                total_chunks_added += added
-                print(f"    - Ingested [{target_dir.name}] '{doc_file.name}': {len(pages)} pages/tables -> {added} vector chunks")
-
-st = stats()
-print("\n==================================================================")
-print(f"  PILOT SUITE READY! Total Indexed Documents: {st['sources']} | Chunks: {st['total_chunks']}")
-print("==================================================================")
+print('Sample pilot files generated successfully in sample_pilot_documents/')
