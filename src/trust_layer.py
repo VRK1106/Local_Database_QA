@@ -61,7 +61,13 @@ def verify_claims(draft_answer, context_texts):
         import numpy as np
         pred_label_idx = np.argmax(claim_scores)
         
-        if pred_label_idx == 1:
+        # Fast-path: If the claim is just a direct substring extraction (ignoring case),
+        # it is definitionally entailed by the text. NLI models often fail on short, non-sentence phrases.
+        # We require at least 5 characters to avoid matching single stray letters (like "F").
+        if len(claim.strip()) > 5 and claim.lower().strip() in combined_context.lower():
+            status = "entailment"
+            supported += 1
+        elif pred_label_idx == 1:
             status = "entailment"
             supported += 1
         elif pred_label_idx == 0:

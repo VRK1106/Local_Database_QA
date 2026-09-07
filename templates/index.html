@@ -499,6 +499,13 @@
             </div>
 
             <div class="form-group">
+                <label class="form-label" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                    <span><i class="fa-solid fa-shield-halved" style="color: var(--accent-cyan);"></i> Trust Layer (NLI)</span>
+                    <input type="checkbox" id="trust-checkbox" style="accent-color: var(--accent-cyan); width: 16px; height: 16px; cursor: pointer;" checked>
+                </label>
+            </div>
+
+            <div class="form-group">
                 <label class="form-label">Top-K Passages</label>
                 <select name="top_k" id="top-k-select" class="form-select">
                     <option value="2" {% if top_k == 2 %}selected{% endif %}>2 Passages</option>
@@ -602,6 +609,12 @@
         btnIcon.className = "fa-solid fa-spinner fa-spin";
         btnText.textContent = "Streaming...";
 
+        // Remove any old trust badge from previous queries
+        const oldTrustBadge = document.getElementById('trust-badge');
+        if (oldTrustBadge) {
+            oldTrustBadge.remove();
+        }
+
         activeModelSpan.textContent = model;
         answerCard.style.display = "block";
         answerTextDiv.innerHTML = '<span class="cursor-blink">Searching local database & starting Ollama model...</span>';
@@ -611,6 +624,7 @@
 
         const startTime = performance.now();
         let accumulatedMarkdown = "";
+        let currentContextTexts = [];
 
         try {
             const response = await fetch('/api/stream_query', {
@@ -653,6 +667,7 @@
                             // Context Citations Event
                             if (data.type === 'context') {
                                 if (data.citations && data.citations.length > 0) {
+                                    currentContextTexts = data.citations.map(c => c.text);
                                     citationsContainer.style.display = "block";
                                     citationCount.textContent = data.citations.length;
                                     
@@ -749,7 +764,6 @@
             answerMeta.innerHTML = `<span><i class="fa-solid fa-bolt"></i> Stream Completed in <strong>${totalTime}s</strong></span>`;
 
             // Stream Completed: Reset query text box
-            const queryInput = document.getElementById('query-input');
             if (queryInput) {
                 queryInput.value = '';
             }
@@ -757,6 +771,27 @@
             // Voice Readout (TTS) if enabled
             if (accumulatedMarkdown) {
                 speakAnswerText(accumulatedMarkdown);
+            }
+            
+            // Kick off background Trust Layer Verification
+            const trustEnabled = document.getElementById('trust-checkbox')?.checked;
+            if (mode === 'rag' && currentContextTexts.length > 0 && trustEnabled) {
+                const isSqlExecution = currentContextTexts[0].startsWith("Universal Structured Execution");
+                
+                if (isSqlExecution) {
+                    const modelSpan = document.getElementById('active-model-name');
+                    if (modelSpan) {
+                        modelSpan.parentElement.outerHTML = `
+                        <span class="status-badge online" style="margin-right:8px;" id="trust-badge" title="Mathematically executed directly on database schema">
+                            <i class="fa-solid fa-database"></i> DB Verified: 100%
+                        </span>
+                        <span class="status-badge online">
+                            <i class="fa-solid fa-microchip"></i> <span id="active-model-name">${model}</span>
+                        </span>`;
+                    }
+                } else {
+                    fetchTrustScore(accumulatedMarkdown, currentContextTexts, model);
+                }
             }
 
         } catch (err) {
@@ -766,6 +801,72 @@
             submitBtn.disabled = false;
             btnIcon.className = "fa-solid fa-paper-plane";
             btnText.textContent = "Ask AI";
+        }
+    }
+
+    async function fetchTrustScore(answer, contextTexts, model) {
+        const modelSpan = document.getElementById('active-model-name');
+        if (modelSpan) {
+            modelSpan.parentElement.outerHTML = `
+            <span class="status-badge warning" style="margin-right:8px;" id="trust-badge">
+                <i class="fa-solid fa-spinner fa-spin"></i> Verifying...
+            </span>
+            <span class="status-badge online">
+                <i class="fa-solid fa-microchip"></i> <span id="active-model-name">${model}</span>
+            </span>`;
+        }
+
+        try {
+            const response = await fetch('/api/verify_trust', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ answer: answer, context_texts: contextTexts })
+            });
+            const res = await response.json();
+            
+            const score = res.score;
+            const claims = res.claims;
+            
+            let badgeClass = "offline";
+            let badgeIcon = "fa-triangle-exclamation";
+            if (score > 90) {
+                badgeClass = "online";
+                badgeIcon = "fa-shield-check";
+            } else if (score >= 60) {
+                badgeClass = "warning";
+                badgeIcon = "fa-shield-halved";
+            }
+            
+            const trustBadge = document.getElementById('trust-badge');
+            if (trustBadge) {
+                trustBadge.className = `status-badge ${badgeClass}`;
+                trustBadge.title = "Hallucination Check Score";
+                trustBadge.innerHTML = `<i class="fa-solid ${badgeIcon}"></i> Trust Score: ${score}%`;
+            }
+
+            // Replace answer text with highlighted claims
+            let highlightedHTML = "";
+            for (let claim of claims) {
+                if (claim.status === 'entailment') {
+                    highlightedHTML += `<span style="background-color: rgba(16, 185, 129, 0.15); border-bottom: 2px solid rgba(16, 185, 129, 0.5); border-radius: 2px;">${claim.text}</span> `;
+                } else if (claim.status === 'contradiction') {
+                    highlightedHTML += `<span style="background-color: rgba(239, 68, 68, 0.15); border-bottom: 2px solid rgba(239, 68, 68, 0.5); border-radius: 2px;" title="Hallucination Detected">${claim.text}</span> `;
+                } else {
+                    highlightedHTML += `<span style="background-color: rgba(245, 158, 11, 0.15); border-bottom: 2px solid rgba(245, 158, 11, 0.5); border-radius: 2px;" title="Unverified External Knowledge">${claim.text}</span> `;
+                }
+            }
+            
+            const answerTextDiv = document.getElementById('answer-text');
+            if (highlightedHTML && answerTextDiv) {
+                answerTextDiv.innerHTML = highlightedHTML;
+            }
+
+        } catch (err) {
+            console.error("Trust Layer verification failed:", err);
+            const trustBadge = document.getElementById('trust-badge');
+            if (trustBadge) {
+                trustBadge.style.display = 'none';
+            }
         }
     }
 

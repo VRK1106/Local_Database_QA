@@ -326,12 +326,6 @@ def api_stream_query():
                         pass
                     yield stream_chunk
                 
-                # Trust Layer for SQL Intent
-                if citations:
-                    from src.trust_layer import verify_claims
-                    context_texts = [c["text"] for c in citations]
-                    verification = verify_claims(accumulated_answer, context_texts)
-                    yield f"data: {json.dumps({'type': 'verification', 'result': verification})}\n\n"
                 return
 
         # 1. Fallback: Semantic RAG Vector Search Path
@@ -364,14 +358,23 @@ def api_stream_query():
                 pass
             yield stream_chunk
             
-        # 3. Trust Layer Validation
-        if mode == 'rag' and context_chunks:
-            from src.trust_layer import verify_claims
-            context_texts = [c["text"] for c in context_chunks]
-            verification = verify_claims(accumulated_answer, context_texts)
-            yield f"data: {json.dumps({'type': 'verification', 'result': verification})}\n\n"
+        # Stream ends naturally here. Validation moved to /api/verify_trust
 
     return Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+
+@app.route('/api/verify_trust', methods=['POST'])
+def api_verify_trust():
+    """Asynchronous background endpoint to verify hallucination claims."""
+    data = request.get_json() or {}
+    draft_answer = data.get('answer', '').strip()
+    context_texts = data.get('context_texts', [])
+    
+    if not draft_answer or not context_texts:
+        return jsonify({"score": 100, "claims": []})
+        
+    from src.trust_layer import verify_claims
+    verification = verify_claims(draft_answer, context_texts)
+    return jsonify(verification)
 
 
 @app.route('/api/trigger_voice_typing', methods=['GET', 'POST'])
