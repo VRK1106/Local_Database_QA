@@ -45,6 +45,7 @@ from src.ollama_client import (
     generate_ollama_answer,
     generate_ollama_stream
 )
+from src.structured_query import is_aggregate_query, execute_universal_structured_query
 
 app = Flask(__name__)
 app.secret_key = "local-database-qa-system-secret-key-998877"
@@ -82,26 +83,44 @@ def index():
 
     if query:
         t0 = time.time()
-        # 1. Vector Search
-        query_vec = embed_query(query)
-        hits = search(
-            query_embedding=query_vec,
-            top_k=top_k,
-            source_filters=selected_sources if selected_sources else None
-        )
-        t1 = time.time()
-        retrieval_time = round(t1 - t0, 3)
-        results = hits
+        
+        # 0. Check for Universal Structured Query Path across all target documents
+        if mode == 'rag' and is_aggregate_query(query):
+            final_prompt, sql_q, sql_res, citations = execute_universal_structured_query(
+                query=query,
+                documents_dir=DOCUMENTS_DIR,
+                selected_sources=selected_sources if selected_sources else None,
+                model_name=selected_model
+            )
+            if final_prompt:
+                t2 = time.time()
+                answer = generate_ollama_answer(prompt=final_prompt, model_name=selected_model)
+                results = citations
+                t1 = time.time()
+                retrieval_time = 0.0
+                generation_time = round(time.time() - t2, 3)
 
-        if mode == 'rag':
-            prompt = build_rag_prompt(query, hits)
-            t2 = time.time()
-            answer = generate_ollama_answer(prompt=prompt, model_name=selected_model)
-            generation_time = round(time.time() - t2, 3)
-        elif mode == 'direct':
-            t2 = time.time()
-            answer = generate_ollama_answer(prompt=query, model_name=selected_model)
-            generation_time = round(time.time() - t2, 3)
+        if answer is None:
+            # 1. Fallback / Vector Search (Semantic RAG Path)
+            query_vec = embed_query(query)
+            hits = search(
+                query_embedding=query_vec,
+                top_k=top_k,
+                source_filters=selected_sources if selected_sources else None
+            )
+            t1 = time.time()
+            retrieval_time = round(t1 - t0, 3)
+            results = hits
+
+            if mode == 'rag':
+                prompt = build_rag_prompt(query, hits)
+                t2 = time.time()
+                answer = generate_ollama_answer(prompt=prompt, model_name=selected_model)
+                generation_time = round(time.time() - t2, 3)
+            elif mode == 'direct':
+                t2 = time.time()
+                answer = generate_ollama_answer(prompt=query, model_name=selected_model)
+                generation_time = round(time.time() - t2, 3)
 
     return render_template(
         'index.html',
@@ -156,46 +175,90 @@ def system_info_page():
 
 @app.route('/api/upload', methods=['POST'])
 def api_upload():
-    """Handle document uploads, parsing, chunking, and ChromaDB vector indexing."""
+    """Handle document uploads, parsing, chunking, and ChromaDB vector indexing with streaming progress."""
     uploaded_files = request.files.getlist('files')
+    
+    # Check if this is an AJAX/fetch request
+    is_ajax = 'application/json' in request.headers.get('Accept', '') or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    
     if not uploaded_files or not uploaded_files[0].filename:
+        if is_ajax:
+            return jsonify({"status": "error", "message": "No files selected."}), 400
         flash("No files selected for upload.", "warning")
         return redirect(url_for('documents_page'))
 
-    known = ingested_hashes()
-    indexed_count = 0
-    skipped_count = 0
-
+    # Read all files into memory before the view function returns,
+    # because Werkzeug closes temporary files once the response is returned.
+    files_data = []
     for f in uploaded_files:
-        if not f.filename:
-            continue
-        try:
-            content = f.read()
-            if not content:
-                continue
-            digest = file_hash(content)
-            if digest in known:
-                skipped_count += 1
-                continue
+        if f.filename:
+            files_data.append((f.filename, f.read()))
 
-            pages = extract_pages(BytesIO(content), f.filename)
-            if not pages:
-                continue
+    def generate():
+        known = ingested_hashes()
+        indexed_count = 0
+        skipped_count = 0
 
-            chunks = chunk_pages(pages, f.filename)
-            embeddings = embed_documents([c["text"] for c in chunks])
-            add_chunks(chunks, embeddings, digest)
+        for filename, content in files_data:
+            try:
+                if is_ajax:
+                    yield json.dumps({"status": "progress", "message": f"Processing file: {filename}..."}) + "\n"
+                
+                if not content:
+                    continue
+                digest = file_hash(content)
+                if digest in known:
+                    skipped_count += 1
+                    if is_ajax:
+                        yield json.dumps({"status": "progress", "message": f"Skipping {filename} (already indexed)."}) + "\n"
+                    continue
 
-            # Save file to disk
-            save_path = Path(DOCUMENTS_DIR) / f.filename
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            save_path.write_bytes(content)
+                if is_ajax:
+                    yield json.dumps({"status": "progress", "message": f"Extracting pages from {filename}..."}) + "\n"
+                pages = extract_pages(BytesIO(content), filename)
+                if not pages:
+                    if is_ajax:
+                        yield json.dumps({"status": "error", "message": f"Extraction failed for {filename}. The file might be empty or unsupported."}) + "\n"
+                    continue
 
-            known.add(digest)
-            indexed_count += 1
-        except Exception as e:
-            flash(f"Error processing {f.filename}: {e}", "danger")
+                if is_ajax:
+                    yield json.dumps({"status": "progress", "message": f"Chunking {filename}..."}) + "\n"
+                chunks = chunk_pages(pages, filename)
+                
+                if is_ajax:
+                    yield json.dumps({"status": "progress", "message": f"Embedding {len(chunks)} chunks for {filename} (this may take a while)..."}) + "\n"
+                embeddings = embed_documents([c["text"] for c in chunks])
+                
+                if is_ajax:
+                    yield json.dumps({"status": "progress", "message": f"Saving {filename} to database..."}) + "\n"
+                add_chunks(chunks, embeddings, digest)
 
+                # Save file to disk
+                save_path = Path(DOCUMENTS_DIR) / filename
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                save_path.write_bytes(content)
+
+                known.add(digest)
+                indexed_count += 1
+                
+                if is_ajax:
+                    yield json.dumps({"status": "progress", "message": f"Finished {filename}!"}) + "\n"
+            except Exception as e:
+                if is_ajax:
+                    yield json.dumps({"status": "error", "message": f"Error processing {filename}: {str(e)}"}) + "\n"
+                else:
+                    flash(f"Error processing {filename}: {e}", "danger")
+
+        if is_ajax:
+            yield json.dumps({"status": "done", "indexed": indexed_count, "skipped": skipped_count}) + "\n"
+
+    if is_ajax:
+        return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
+    
+    # Fallback for standard form upload
+    for _ in generate():
+        pass
+        
     if indexed_count > 0:
         flash(f"Successfully indexed {indexed_count} new document(s) into ChromaDB!", "success")
     elif skipped_count > 0:
@@ -218,13 +281,20 @@ def api_delete_doc():
 def api_reset_db():
     """Completely wipe the ChromaDB collection and document storage."""
     reset_collection()
+    import shutil
+    import os
+    if os.path.exists(DOCUMENTS_DIR):
+        try:
+            shutil.rmtree(DOCUMENTS_DIR)
+        except Exception as e:
+            print(f"Error removing documents directory: {e}")
     flash("Local database wiped successfully.", "warning")
     return redirect(url_for('documents_page'))
 
 
 @app.route('/api/stream_query', methods=['POST'])
 def api_stream_query():
-    """Stream response tokens from Ollama using SSE."""
+    """Stream response tokens from Ollama using SSE with Structured Excel Query Routing support."""
     data = request.get_json() or {}
     query = data.get('query', '').strip()
     model = data.get('model') or list_ollama_models()[0]
@@ -236,13 +306,40 @@ def api_stream_query():
         return jsonify({"error": "Empty query"}), 400
 
     def event_stream():
-        # 1. Retrieve vector context if in RAG mode
+        # 0. Detect count/aggregate intent for Universal Structured Query Routing
+        if mode == 'rag' and is_aggregate_query(query):
+            final_prompt, sql_q, sql_res, citations = execute_universal_structured_query(
+                query=query,
+                documents_dir=DOCUMENTS_DIR,
+                selected_sources=sources if sources else None,
+                model_name=model
+            )
+            if final_prompt:
+                yield f"data: {json.dumps({'type': 'context', 'citations': citations})}\n\n"
+                accumulated_answer = ""
+                for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
+                    try:
+                        chunk_data = json.loads(stream_chunk.replace("data: ", ""))
+                        if "token" in chunk_data:
+                            accumulated_answer += chunk_data["token"]
+                    except:
+                        pass
+                    yield stream_chunk
+                
+                # Trust Layer for SQL Intent
+                if citations:
+                    from src.trust_layer import verify_claims
+                    context_texts = [c["text"] for c in citations]
+                    verification = verify_claims(accumulated_answer, context_texts)
+                    yield f"data: {json.dumps({'type': 'verification', 'result': verification})}\n\n"
+                return
+
+        # 1. Fallback: Semantic RAG Vector Search Path
         context_chunks = []
         if mode == 'rag':
             query_vec = embed_query(query)
             context_chunks = search(query_vec, top_k=top_k, source_filters=sources if sources else None)
 
-            # Send vector context metadata event first
             citations = [{
                 "source": c["source"],
                 "page": c["page"],
@@ -257,10 +354,88 @@ def api_stream_query():
             yield f"data: {json.dumps({'type': 'context', 'citations': []})}\n\n"
 
         # 2. Stream tokens from Ollama
+        accumulated_answer = ""
         for stream_chunk in generate_ollama_stream(prompt=prompt, model_name=model):
+            try:
+                chunk_data = json.loads(stream_chunk.replace("data: ", ""))
+                if "token" in chunk_data:
+                    accumulated_answer += chunk_data["token"]
+            except:
+                pass
             yield stream_chunk
+            
+        # 3. Trust Layer Validation
+        if mode == 'rag' and context_chunks:
+            from src.trust_layer import verify_claims
+            context_texts = [c["text"] for c in context_chunks]
+            verification = verify_claims(accumulated_answer, context_texts)
+            yield f"data: {json.dumps({'type': 'verification', 'result': verification})}\n\n"
 
     return Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+
+
+@app.route('/api/trigger_voice_typing', methods=['GET', 'POST'])
+def trigger_voice_typing():
+    """Trigger Windows Voice Typing (Win+H) using Win32 ctypes keybd_event or pyautogui fallback."""
+    import platform, time
+    success = False
+    err_msg = ""
+    
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+            # VK_LWIN = 0x5B, VK_H = 0x48, KEYEVENTF_KEYUP = 0x0002
+            ctypes.windll.user32.keybd_event(0x5B, 0, 0, 0)
+            time.sleep(0.05)
+            ctypes.windll.user32.keybd_event(0x48, 0, 0, 0)
+            time.sleep(0.05)
+            ctypes.windll.user32.keybd_event(0x48, 0, 2, 0)
+            time.sleep(0.05)
+            ctypes.windll.user32.keybd_event(0x5B, 0, 2, 0)
+            success = True
+        except Exception as e:
+            err_msg = str(e)
+
+    if not success and pyautogui is not None:
+        try:
+            pyautogui.hotkey('win', 'h')
+            success = True
+        except Exception as e:
+            err_msg = str(e)
+
+    if success:
+        return jsonify({"status": "success", "message": "Triggered Win+H"})
+    return jsonify({"status": "error", "message": err_msg or "Failed to trigger Win+H"}), 500
+
+
+@app.route('/api/stop_voice_typing', methods=['GET', 'POST'])
+def stop_voice_typing():
+    """Dismiss Windows Dictation popup (Esc) using Win32 ctypes keybd_event or pyautogui fallback."""
+    import platform, time
+    success = False
+    err_msg = ""
+
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+            # VK_ESCAPE = 0x1B, KEYEVENTF_KEYUP = 0x0002
+            ctypes.windll.user32.keybd_event(0x1B, 0, 0, 0)
+            time.sleep(0.05)
+            ctypes.windll.user32.keybd_event(0x1B, 0, 2, 0)
+            success = True
+        except Exception as e:
+            err_msg = str(e)
+
+    if not success and pyautogui is not None:
+        try:
+            pyautogui.press('esc')
+            success = True
+        except Exception as e:
+            err_msg = str(e)
+
+    if success:
+        return jsonify({"status": "success", "message": "Triggered Esc"})
+    return jsonify({"status": "error", "message": err_msg or "Failed to trigger Esc"}), 500
 
 
 if __name__ == '__main__':

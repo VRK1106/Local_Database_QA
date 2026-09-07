@@ -194,9 +194,9 @@ def extract_text_from_nosql_json(stream: BytesIO, filename: str) -> list[dict]:
 
 
 def extract_text_from_excel(stream: BytesIO, filename: str) -> list[dict]:
-    """Universal, domain-agnostic CSV-preprocessed parser for ANY Excel spreadsheet (.xlsx, .xls, .xlsm)."""
+    """Universal, domain-agnostic Key-Value parser for ANY Excel spreadsheet with semantic synthetic sentences."""
     pages = []
-    # Primary: pandas/openpyxl CSV preprocessing with Categorical Overview Header
+    # Primary: pandas/openpyxl Key-Value extraction with Categorical Overview Header
     try:
         import pandas as pd
         excel_file = pd.ExcelFile(stream)
@@ -206,6 +206,7 @@ def extract_text_from_excel(stream: BytesIO, filename: str) -> list[dict]:
                 continue
 
             headers = [str(c).strip() for c in df_sheet.columns]
+            total_rows = len(df_sheet)
             col_value_counts = {h: {} for h in headers}
 
             # Gather categorical distribution statistics across all rows
@@ -220,32 +221,45 @@ def extract_text_from_excel(stream: BytesIO, filename: str) -> list[dict]:
             cat_summaries = []
             for h in headers:
                 counts = col_value_counts[h]
-                if 2 <= len(counts) <= 100 and sum(counts.values()) >= 4:
+                if len(counts) <= 30 and len(counts) < total_rows * 0.5 and any(c >= 2 for c in counts.values()):
                     top_vals = [f"'{val}' ({cnt})" for val, cnt in sorted(counts.items(), key=lambda x: x[1], reverse=True)]
                     cat_summaries.append(f"- Column [{h}]: {', '.join(top_vals)}")
 
             if cat_summaries:
                 summary_lines.append("=== Sheet Overview & Categorical Distributions ===")
                 summary_lines.extend(cat_summaries)
-                summary_lines.append("\n=== CSV Records ===")
+                
+            summary_lines.append("\n=== Detailed Records ===")
 
-            # Convert sheet rows to clean, space-efficient CSV
-            csv_buffer = StringIO()
-            df_sheet.to_csv(csv_buffer, index=False)
-            csv_records_str = csv_buffer.getvalue()
+            # Build semantic key-value strings for each row
+            for row_idx, row in df_sheet.iterrows():
+                kv_pairs = []
+                synthetic_parts = []
+                for h in headers:
+                    val = str(row[h]).strip() if pd.notna(row[h]) else ""
+                    if val:
+                        kv_pairs.append(f"{h}: {val}")
+                        synthetic_parts.append(f"{h} is {val}")
+                
+                if kv_pairs:
+                    synthetic_sentence = f"This record indicates that " + ", and ".join(synthetic_parts) + "."
+                    row_text = f"Row {row_idx + 1} -> " + " | ".join(kv_pairs) + f"\nContext: {synthetic_sentence}"
+                    summary_lines.append(row_text)
 
-            sheet_header = f"[Excel Dataset: {filename} | Sheet: {sheet_name} | Total Columns: {len(headers)} | Total Rows: {len(df_sheet)}]\n"
-            full_sheet_text = sheet_header + "\n".join(summary_lines) + "\n" + csv_records_str
+            sheet_header = f"[Excel Dataset: {filename} | Sheet: {sheet_name} | Total Columns: {len(headers)} | Total Rows: {total_rows}]\n"
+            full_sheet_text = sheet_header + "\n".join(summary_lines)
             pages.append({"page": idx, "text": full_sheet_text})
 
         if pages:
             return pages
     except Exception as e:
-        print(f"CSV preprocessed Excel extraction for '{filename}' failed: {e}")
+        err_msg = f"Key-Value preprocessed Excel extraction for '{filename}' failed: {e}"
+        print(err_msg)
 
     # Fallback: openpyxl raw string extraction
     try:
         import openpyxl
+        stream.seek(0)
         wb = openpyxl.load_workbook(stream, data_only=True)
         for idx, sheet_name in enumerate(wb.sheetnames, start=1):
             sheet = wb[sheet_name]
@@ -260,8 +274,12 @@ def extract_text_from_excel(stream: BytesIO, filename: str) -> list[dict]:
             return pages
     except Exception as e:
         print(f"openpyxl fallback for '{filename}' failed: {e}")
+        # If both fail, raise the error so the UI can display it
+        raise ValueError(f"Failed to parse Excel file '{filename}'. Ensure it is a valid .xlsx file and not corrupt. Details: {e}")
 
-    return []
+    if not pages:
+        raise ValueError(f"Excel file '{filename}' contains no extractable data or is empty.")
+    return pages
 
 
 def extract_text_from_txt(stream: BytesIO) -> list[dict]:
@@ -328,43 +346,62 @@ def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chun
             header_prefix = lines.strip() + "\n"
             body_text = text[len(lines):].strip()
 
-        words = body_text.split()
-        prefix_words = header_prefix.split() if header_prefix else []
-        effective_chunk_size = max(100, chunk_size - len(prefix_words))
-        step = max(50, effective_chunk_size - chunk_overlap)
+        # Split by lines to preserve row integrity
+        lines = body_text.split('\n')
+        prefix_words = len(header_prefix.split()) if header_prefix else 0
+        effective_chunk_size = max(50, chunk_size - prefix_words)
 
-        if len(words) <= effective_chunk_size:
-            chunk_text = (header_prefix + body_text).strip()
-            chunk_id = f"{source_name}_p{page_num}_c{chunk_counter}"
-            chunks.append({
-                "id": chunk_id,
-                "text": chunk_text,
-                "metadata": {
-                    "source": source_name,
-                    "page": page_num,
-                    "chunk_index": chunk_counter,
-                    "word_count": len(words) + len(prefix_words)
-                }
-            })
-            chunk_counter += 1
-        else:
-            for i in range(0, len(words), step):
-                chunk_words = words[i:i + effective_chunk_size]
-                if not chunk_words:
-                    continue
-                sub_body = " ".join(chunk_words)
-                chunk_text = (header_prefix + sub_body).strip()
-                chunk_id = f"{source_name}_p{page_num}_c{chunk_counter}"
+        current_chunk_lines = []
+        current_word_count = 0
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            line_words = len(line.split())
+            if current_word_count + line_words > effective_chunk_size and current_chunk_lines:
+                chunk_text = (header_prefix + "\n".join(current_chunk_lines)).strip()
                 chunks.append({
-                    "id": chunk_id,
+                    "id": f"{source_name}_p{page_num}_c{chunk_counter}",
                     "text": chunk_text,
                     "metadata": {
                         "source": source_name,
                         "page": page_num,
                         "chunk_index": chunk_counter,
-                        "word_count": len(chunk_words) + len(prefix_words)
+                        "word_count": current_word_count + prefix_words
                     }
                 })
                 chunk_counter += 1
+                
+                # Keep overlap lines
+                overlap_words = 0
+                overlap_lines = []
+                for prev_line in reversed(current_chunk_lines):
+                    prev_words = len(prev_line.split())
+                    if overlap_words + prev_words > chunk_overlap:
+                        break
+                    overlap_words += prev_words
+                    overlap_lines.insert(0, prev_line)
+                
+                current_chunk_lines = overlap_lines
+                current_word_count = overlap_words
+
+            current_chunk_lines.append(line)
+            current_word_count += line_words
+
+        if current_chunk_lines:
+            chunk_text = (header_prefix + "\n".join(current_chunk_lines)).strip()
+            chunks.append({
+                "id": f"{source_name}_p{page_num}_c{chunk_counter}",
+                "text": chunk_text,
+                "metadata": {
+                    "source": source_name,
+                    "page": page_num,
+                    "chunk_index": chunk_counter,
+                    "word_count": current_word_count + prefix_words
+                }
+            })
+            chunk_counter += 1
 
     return chunks

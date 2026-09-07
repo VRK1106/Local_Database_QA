@@ -6,40 +6,55 @@
 {% block extra_head %}
 <style>
     .qa-container {
-        display: grid;
-        grid-template-columns: 1fr 340px;
-        gap: 24px;
+        display: flex;
+        gap: 16px;
+        width: 100%;
+        align-items: flex-start;
+    }
+
+    .left-col {
+        flex: 1;
+        min-width: 0;
+    }
+
+    @media (max-width: 1150px) {
+        .qa-container {
+            flex-direction: column;
+        }
     }
 
     .query-box {
         background: var(--bg-card);
         border: 1px solid var(--bg-card-border);
         border-radius: var(--radius-lg);
-        padding: 24px;
+        padding: 16px 20px;
         backdrop-filter: blur(16px);
-        margin-bottom: 24px;
+        margin-bottom: 16px;
     }
 
     .mode-selector {
         display: flex;
-        gap: 12px;
-        margin-bottom: 20px;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
     }
 
     .mode-btn {
-        flex: 1;
-        padding: 12px;
+        flex: 1 1 auto;
+        min-width: 140px;
+        padding: 9px 12px;
         border-radius: var(--radius-md);
         border: 1px solid var(--bg-card-border);
         background: rgba(255, 255, 255, 0.03);
         color: var(--text-muted);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
+        gap: 6px;
+        white-space: nowrap;
         transition: all 0.2s ease;
     }
 
@@ -53,37 +68,37 @@
     .query-input-wrapper {
         position: relative;
         display: flex;
-        gap: 12px;
+        gap: 10px;
     }
 
     .query-textarea {
         flex: 1;
-        min-height: 90px;
+        min-height: 70px;
         resize: vertical;
-        padding: 16px;
+        padding: 12px 14px;
         font-family: inherit;
         border-radius: var(--radius-md);
         background: var(--bg-input);
         border: 1px solid var(--bg-card-border);
         color: var(--text-main);
-        font-size: 15px;
+        font-size: 14px;
     }
 
     .send-btn {
-        padding: 0 28px;
-        height: 90px;
+        padding: 0 22px;
+        height: 70px;
         background: var(--gradient-primary);
         border: none;
         border-radius: var(--radius-md);
         color: #fff;
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 600;
         cursor: pointer;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 6px;
+        gap: 4px;
         box-shadow: 0 4px 20px rgba(6, 182, 212, 0.35);
         transition: all 0.2s ease;
     }
@@ -107,6 +122,9 @@
         padding: 24px;
         margin-bottom: 24px;
         position: relative;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+        max-width: 100%;
     }
 
     .answer-header {
@@ -134,6 +152,8 @@
         line-height: 1.7;
         color: #e2e8f0;
         min-height: 60px;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
     }
 
     .answer-body p {
@@ -213,6 +233,9 @@
         padding: 16px;
         margin-bottom: 12px;
         transition: border-color 0.2s ease;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+        max-width: 100%;
     }
 
     .citation-card:hover {
@@ -240,16 +263,20 @@
         font-size: 13px;
         color: var(--text-muted);
         line-height: 1.5;
-        max-height: 100px;
+        max-height: 120px;
         overflow-y: auto;
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
     }
 
     /* Options Panel (Right Column) */
     .options-panel {
+        width: 240px;
+        flex-shrink: 0;
         background: var(--bg-card);
         border: 1px solid var(--bg-card-border);
         border-radius: var(--radius-lg);
-        padding: 20px;
+        padding: 16px;
         height: fit-content;
     }
 
@@ -513,15 +540,22 @@
         });
     }
 
+    function formatMeaningfulText(text) {
+        if (!text) return '';
+        // Automatically insert a space after commas in unspaced lists (e.g., "Student_1,Student_2" -> "Student_1, Student_2")
+        return text.replace(/,([^\s])/g, ', $1');
+    }
+
     // Render initial answer markdown if present
     document.addEventListener("DOMContentLoaded", function() {
         const rawContent = document.getElementById('raw-answer-content');
         const answerTextDiv = document.getElementById('answer-text');
         if (rawContent && rawContent.textContent.trim()) {
+            const formatted = formatMeaningfulText(rawContent.textContent.trim());
             if (typeof marked !== 'undefined') {
-                answerTextDiv.innerHTML = marked.parse(rawContent.textContent.trim());
+                answerTextDiv.innerHTML = marked.parse(formatted);
             } else {
-                answerTextDiv.textContent = rawContent.textContent.trim();
+                answerTextDiv.textContent = formatted;
             }
         }
     });
@@ -632,7 +666,7 @@
                                                 <span class="citation-score">Relevance: ${(c.score * 100).toFixed(1)}%</span>
                                             </div>
                                             <div class="citation-text">
-                                                "${c.text}"
+                                                "${formatMeaningfulText(c.text)}"
                                             </div>
                                         </div>
                                     `).join('');
@@ -642,10 +676,54 @@
                             // Token Stream Event
                             if (data.token) {
                                 accumulatedMarkdown += data.token;
+                                const formattedText = formatMeaningfulText(accumulatedMarkdown);
                                 if (typeof marked !== 'undefined') {
-                                    answerTextDiv.innerHTML = marked.parse(accumulatedMarkdown) + '<span class="cursor-blink"></span>';
+                                    answerTextDiv.innerHTML = marked.parse(formattedText) + '<span class="cursor-blink"></span>';
                                 } else {
-                                    answerTextDiv.textContent = accumulatedMarkdown;
+                                    answerTextDiv.textContent = formattedText;
+                                }
+                            }
+                            
+                            // Verification Event
+                            if (data.type === 'verification') {
+                                const res = data.result;
+                                const score = res.score;
+                                const claims = res.claims;
+                                
+                                let badgeClass = "offline";
+                                let badgeIcon = "fa-triangle-exclamation";
+                                if (score > 90) {
+                                    badgeClass = "online";
+                                    badgeIcon = "fa-shield-check";
+                                } else if (score >= 60) {
+                                    badgeClass = "warning";
+                                    badgeIcon = "fa-shield-halved";
+                                }
+                                
+                                const modelSpan = document.getElementById('active-model-name');
+                                if (modelSpan) {
+                                    modelSpan.parentElement.outerHTML = `
+                                    <span class="status-badge ${badgeClass}" style="margin-right:8px;" title="Hallucination Check Score">
+                                        <i class="fa-solid ${badgeIcon}"></i> Trust Score: ${score}%
+                                    </span>
+                                    <span class="status-badge online">
+                                        <i class="fa-solid fa-microchip"></i> <span id="active-model-name">${document.getElementById('model-select').value}</span>
+                                    </span>`;
+                                }
+
+                                // Replace answer text with highlighted claims
+                                let highlightedHTML = "";
+                                for (let claim of claims) {
+                                    if (claim.status === 'entailment') {
+                                        highlightedHTML += `<span style="background-color: rgba(16, 185, 129, 0.15); border-bottom: 2px solid rgba(16, 185, 129, 0.5); border-radius: 2px;">${claim.text}</span> `;
+                                    } else if (claim.status === 'contradiction') {
+                                        highlightedHTML += `<span style="background-color: rgba(239, 68, 68, 0.15); border-bottom: 2px solid rgba(239, 68, 68, 0.5); border-radius: 2px;" title="Hallucination Detected">${claim.text}</span> `;
+                                    } else {
+                                        highlightedHTML += `<span style="background-color: rgba(245, 158, 11, 0.15); border-bottom: 2px solid rgba(245, 158, 11, 0.5); border-radius: 2px;" title="Unverified External Knowledge">${claim.text}</span> `;
+                                    }
+                                }
+                                if (highlightedHTML) {
+                                    answerTextDiv.innerHTML = highlightedHTML + '<span class="cursor-blink"></span>';
                                 }
                             }
 
@@ -661,13 +739,20 @@
 
             // Final formatting pass (remove cursor blink)
             const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            const finalFormatted = formatMeaningfulText(accumulatedMarkdown);
             if (typeof marked !== 'undefined') {
-                answerTextDiv.innerHTML = marked.parse(accumulatedMarkdown);
+                answerTextDiv.innerHTML = marked.parse(finalFormatted);
             } else {
-                answerTextDiv.textContent = accumulatedMarkdown;
+                answerTextDiv.textContent = finalFormatted;
             }
 
             answerMeta.innerHTML = `<span><i class="fa-solid fa-bolt"></i> Stream Completed in <strong>${totalTime}s</strong></span>`;
+
+            // Stream Completed: Reset query text box
+            const queryInput = document.getElementById('query-input');
+            if (queryInput) {
+                queryInput.value = '';
+            }
 
             // Voice Readout (TTS) if enabled
             if (accumulatedMarkdown) {
@@ -684,15 +769,26 @@
         }
     }
 
-    // Voice Query (Offline OS-level Delegation)
-    function toggleVoiceSearch() {
+    // Voice Query Automation Pipeline
+    let isVoiceTypingMode = false;
+    let voiceTypingTimer = null;
+
+    async function toggleVoiceSearch() {
         const queryInput = document.getElementById('query-input');
         const banner = document.getElementById('voice-status-banner');
         const bannerText = document.getElementById('voice-status-text');
-        
+        const micIcon = document.getElementById('mic-icon');
+
+        isVoiceTypingMode = true;
+
         // Focus the input box automatically
         if (queryInput) {
             queryInput.focus();
+        }
+
+        if (micIcon) {
+            micIcon.className = "fa-solid fa-microphone-lines fa-bounce";
+            micIcon.style.color = "var(--accent-cyan)";
         }
 
         // Show the instruction banner
@@ -701,14 +797,50 @@
             banner.style.background = 'rgba(6, 182, 212, 0.15)';
             banner.style.border = '1px solid var(--accent-cyan)';
             banner.style.color = 'var(--accent-cyan)';
-            bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>OFFLINE VOICE ENGINE:</strong> Press <strong>Windows Key + H</strong> now to start typing with your voice.';
-            
-            // Auto-hide the banner after 8 seconds
-            setTimeout(() => {
-                banner.style.display = 'none';
-            }, 8000);
+            bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>OFFLINE VOICE ENGINE ACTIVE:</strong> Speak now. Auto-submits after 2.5s pause.';
+        }
+
+        // Automatically trigger Windows native Dictation (Win+H)
+        try {
+            await fetch('/api/trigger_voice_typing');
+        } catch (err) {
+            console.error("Trigger voice typing error:", err);
         }
     }
+
+    // Auto-Submit Debounce Handler (2.5 Seconds of Silence/Pause)
+    document.getElementById('query-input')?.addEventListener('input', function(e) {
+        if (!isVoiceTypingMode) return;
+        
+        clearTimeout(voiceTypingTimer);
+
+        const bannerText = document.getElementById('voice-status-text');
+        if (bannerText) {
+            bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>Hearing Voice Input...</strong> Auto-submitting in 2.5s...';
+        }
+
+        voiceTypingTimer = setTimeout(() => {
+            if (this.value.trim() !== '') {
+                isVoiceTypingMode = false;
+
+                // Dismiss Windows Dictation Toolbar (Esc)
+                try { fetch('/api/stop_voice_typing'); } catch (err) {}
+
+                const banner = document.getElementById('voice-status-banner');
+                if (banner) banner.style.display = 'none';
+
+                const micIcon = document.getElementById('mic-icon');
+                if (micIcon) {
+                    micIcon.className = "fa-solid fa-microphone";
+                    micIcon.style.color = "";
+                }
+
+                // Submit Form
+                const submitBtn = document.getElementById('submit-btn');
+                if (submitBtn) submitBtn.click();
+            }
+        }, 2500);
+    });
 
     // Voice Readout (Text-to-Speech) Implementation
     function speakAnswerText(markdownText) {
