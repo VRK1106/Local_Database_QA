@@ -220,8 +220,8 @@ def init_auth_db():
                 pass
     conn.commit()
 
-    # Seed default placement administrator if no placement/developer user exists
-    cur.execute("SELECT id FROM users WHERE role IN ('placement', 'developer') LIMIT 1;")
+    # Seed default persona accounts if not present
+    cur.execute("SELECT id FROM users WHERE username = 'admin';")
     if not cur.fetchone():
         admin_pass_hash = generate_password_hash("admin123")
         cur.execute("""
@@ -229,7 +229,27 @@ def init_auth_db():
             VALUES (?, ?, 'placement', NULL, 0, 1)
         """, ("admin", admin_pass_hash))
         conn.commit()
-        print("[AUTH] Initial placement administrator seeded: username='admin', password='admin123'")
+        print("[AUTH] Seeded default placement coordinator: username='admin', password='admin123'")
+
+    cur.execute("SELECT id FROM users WHERE username = 'stu001';")
+    if not cur.fetchone():
+        stu_pass_hash = generate_password_hash("Password@123")
+        cur.execute("""
+            INSERT INTO users (username, password_hash, role, student_id, must_change_password, active)
+            VALUES (?, ?, 'student', 'STU001', 0, 1)
+        """, ("stu001", stu_pass_hash))
+        conn.commit()
+        print("[AUTH] Seeded default student: username='stu001', password='Password@123', student_id='STU001'")
+
+    cur.execute("SELECT id FROM users WHERE username = 'dev_admin';")
+    if not cur.fetchone():
+        dev_pass_hash = generate_password_hash("DeveloperPass@1234")
+        cur.execute("""
+            INSERT INTO users (username, password_hash, role, student_id, must_change_password, active)
+            VALUES (?, ?, 'developer', NULL, 0, 1)
+        """, ("dev_admin", dev_pass_hash))
+        conn.commit()
+        print("[AUTH] Seeded default developer: username='dev_admin', password='DeveloperPass@1234'")
 
     conn.close()
 
