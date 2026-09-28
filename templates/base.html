@@ -50,12 +50,12 @@
             overflow-x: hidden;
         }
 
-        /* Sidebar Styling */
+        /* Sidebar Styling - Automatically Hidden By Default */
         .sidebar {
-            width: 240px;
-            background: rgba(15, 23, 42, 0.9);
+            width: 250px;
+            background: rgba(15, 23, 42, 0.96);
             border-right: 1px solid var(--bg-card-border);
-            backdrop-filter: blur(12px);
+            backdrop-filter: blur(16px);
             display: flex;
             flex-direction: column;
             padding: 20px 14px;
@@ -64,7 +64,14 @@
             bottom: 0;
             left: 0;
             z-index: 100;
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateX(-100%);
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.28s ease;
+            box-shadow: none;
+        }
+
+        body.sidebar-visible .sidebar {
+            transform: translateX(0);
+            box-shadow: 10px 0 40px rgba(0, 0, 0, 0.7);
         }
 
         .brand-logo {
@@ -196,25 +203,16 @@
             background: currentColor;
         }
 
-        /* Main Content Layout */
+        /* Main Content Layout - Default Spacious Full Width Canvas */
         .main-wrapper {
-            margin-left: 240px;
+            margin-left: 0 !important;
             flex: 1;
             display: flex;
             flex-direction: column;
             min-height: 100vh;
-            max-width: calc(100vw - 240px);
-            overflow-x: hidden;
-            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        body.sidebar-collapsed .sidebar {
-            transform: translateX(-100%);
-        }
-
-        body.sidebar-collapsed .main-wrapper {
-            margin-left: 0 !important;
             max-width: 100vw !important;
+            overflow-x: hidden;
+            width: 100%;
         }
 
         .hamburger-btn {
@@ -276,28 +274,21 @@
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.65);
-            backdrop-filter: blur(4px);
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(2px);
             z-index: 95;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.28s ease;
+            pointer-events: none;
+        }
+
+        body.sidebar-visible .sidebar-backdrop {
+            display: block;
+            opacity: 1;
+            pointer-events: auto;
         }
 
         @media (max-width: 900px) {
-            .sidebar {
-                transform: translateX(-100%);
-            }
-            body.sidebar-open .sidebar {
-                transform: translateX(0);
-            }
-            body.sidebar-open .sidebar-backdrop {
-                display: block;
-                opacity: 1;
-            }
-            .main-wrapper {
-                margin-left: 0 !important;
-                max-width: 100vw !important;
-            }
             .content-area {
                 padding: 18px 16px;
             }
@@ -649,23 +640,66 @@
     </div>
 
     <script>
-        function toggleSidebar() {
-            if (window.innerWidth <= 900) {
-                document.body.classList.toggle('sidebar-open');
+        let sidebarTimer = null;
+
+        function showSidebar() {
+            clearTimeout(sidebarTimer);
+            document.body.classList.add('sidebar-visible');
+        }
+
+        function hideSidebar(delay = 180) {
+            clearTimeout(sidebarTimer);
+            if (delay === 0) {
+                document.body.classList.remove('sidebar-visible');
             } else {
-                document.body.classList.toggle('sidebar-collapsed');
-                try {
-                    localStorage.setItem('sidebar_collapsed', document.body.classList.contains('sidebar-collapsed') ? '1' : '0');
-                } catch(e) {}
+                sidebarTimer = setTimeout(function() {
+                    document.body.classList.remove('sidebar-visible');
+                }, delay);
+            }
+        }
+
+        function toggleSidebar() {
+            if (document.body.classList.contains('sidebar-visible')) {
+                hideSidebar(0);
+            } else {
+                showSidebar();
             }
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            try {
-                if (window.innerWidth > 900 && localStorage.getItem('sidebar_collapsed') === '1') {
-                    document.body.classList.add('sidebar-collapsed');
-                }
-            } catch(e) {}
+            const sidebar = document.querySelector('.sidebar');
+            const toggleBtn = document.getElementById('sidebar-toggle-btn');
+            const backdrop = document.getElementById('sidebar-backdrop');
+
+            // Hovering over hamburger button reveals sidebar
+            if (toggleBtn) {
+                toggleBtn.addEventListener('mouseenter', showSidebar);
+                toggleBtn.addEventListener('mouseleave', function() {
+                    hideSidebar(220);
+                });
+            }
+
+            // Hovering inside sidebar keeps it visible; leaving hides it
+            if (sidebar) {
+                sidebar.addEventListener('mouseenter', showSidebar);
+                sidebar.addEventListener('mouseleave', function() {
+                    hideSidebar(180);
+                });
+            }
+
+            // Clicking outside backdrop closes sidebar immediately
+            if (backdrop) {
+                backdrop.addEventListener('click', function() {
+                    hideSidebar(0);
+                });
+            }
+
+            // Clicking any link in sidebar closes it
+            document.querySelectorAll('.sidebar .nav-link, .sidebar a').forEach(function(link) {
+                link.addEventListener('click', function() {
+                    hideSidebar(0);
+                });
+            });
 
             // Auto-dismiss alert notification banners (e.g. login confirmation banner) after 3 seconds
             const alerts = document.querySelectorAll('.alert');
