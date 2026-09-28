@@ -321,3 +321,78 @@ def execute_universal_structured_query(query: str, documents_dir: Path, selected
         except:
             pass
         return None, None, None, []
+
+
+def execute_student_scoped_query(query: str, student_id: str, documents_dir: Path, model_name: str):
+    """
+    Ironclad row-level student scoping:
+    Executes a hardcoded, parameterized query strictly bound to the authenticated student_id.
+    Bypasses LLM SQL generation, completely preventing cross-student data exfiltration.
+    Returns (final_prompt, sql_query, sql_result, citations) or (None, None, None, []).
+    """
+    import json
+    if not student_id:
+        return None, None, None, []
+
+    tmp_path, conn, table_schemas = build_universal_sqlite_db(documents_dir, None)
+    if not table_schemas:
+        if conn:
+            conn.close()
+        try:
+            os.remove(tmp_path)
+        except:
+            pass
+        return None, None, None, []
+
+    # Find table with student identifier column
+    target_table = None
+    id_column = None
+    for t_name, info in table_schemas.items():
+        for col in info["samples"].keys():
+            if col.lower() in ["student_id", "usn", "roll_number", "roll_no", "id", "reg_no"]:
+                target_table = t_name
+                id_column = col
+                break
+        if target_table:
+            break
+
+    if not target_table or not id_column:
+        conn.close()
+        try:
+            os.remove(tmp_path)
+        except:
+            pass
+        return None, None, None, []
+
+    safe_sql = f"SELECT * FROM \"{target_table}\" WHERE LOWER(TRIM(\"{id_column}\")) = ? LIMIT 1;"
+    cur = conn.cursor()
+    cur.execute(safe_sql, (student_id.strip().lower(),))
+    row = cur.fetchone()
+    col_names = [description[0] for description in cur.description] if cur.description else []
+    conn.close()
+    try:
+        os.remove(tmp_path)
+    except:
+        pass
+
+    if not row:
+        return None, None, None, []
+
+    student_record = dict(zip(col_names, row))
+    citations = [{
+        "source": table_schemas[target_table]["source_file"],
+        "page": 1,
+        "score": 1.0,
+        "text": f"Authenticated Student Record ({student_id}): {student_record}"
+    }]
+
+    final_prompt = (
+        f"You are the Placement Office Assistant answering an authenticated student whose verified ID is '{student_id}'.\n"
+        f"The student asks: '{query}'\n\n"
+        f"Verified student's personal record from the official database:\n{json.dumps(student_record, indent=2)}\n\n"
+        f"Security & Privacy Directives:\n"
+        f"1. You may ONLY discuss and display information concerning this verified student (ID: '{student_id}').\n"
+        f"2. If the student asks about any other student, their classmates' CGPA, ranks, or aggregate university statistics, strictly refuse and inform them that cross-student records are confidential.\n"
+        f"3. Provide a helpful, clear, and reassuring response based strictly on their official record above."
+    )
+    return final_prompt, safe_sql, [row], citations
