@@ -416,14 +416,19 @@ def log_audit_event(
         cur.execute("""
             INSERT INTO audit_logs (
                 actor_user_id, actor_username, effective_role, effective_student_id,
+                user_id, username, role, query_text,
                 action, endpoint, detail, sources, status, ip_address
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             final_actor_id,
             final_actor_name,
             final_role,
             effective_student_id,
+            final_actor_id,
+            final_actor_name,
+            final_role,
+            final_detail,
             action,
             endpoint,
             final_detail,
@@ -451,52 +456,49 @@ def get_audit_logs(
     conn = get_db_connection()
     cur = conn.cursor()
     
+    select_fields = """
+        id,
+        COALESCE(NULLIF(actor_user_id, 0), user_id, 0) AS actor_user_id,
+        COALESCE(NULLIF(actor_user_id, 0), user_id, 0) AS user_id,
+        COALESCE(NULLIF(actor_username, ''), NULLIF(username, ''), 'anonymous') AS actor_username,
+        COALESCE(NULLIF(actor_username, ''), NULLIF(username, ''), 'anonymous') AS username,
+        COALESCE(NULLIF(effective_role, ''), NULLIF(role, ''), 'unauthenticated') AS effective_role,
+        COALESCE(NULLIF(effective_role, ''), NULLIF(role, ''), 'unauthenticated') AS role,
+        effective_student_id,
+        action, endpoint,
+        COALESCE(NULLIF(detail, ''), NULLIF(query_text, ''), '') AS detail,
+        COALESCE(NULLIF(detail, ''), NULLIF(query_text, ''), '') AS query_text,
+        COALESCE(sources, '') AS sources,
+        status, ip_address, timestamp
+    """
+
     if include_developer_actions:
-        cur.execute("""
-            SELECT id,
-                   COALESCE(actor_user_id, 0) AS actor_user_id,
-                   COALESCE(actor_username, 'anonymous') AS actor_username,
-                   COALESCE(effective_role, 'unauthenticated') AS effective_role,
-                   effective_student_id,
-                   action, endpoint,
-                   COALESCE(detail, '') AS detail,
-                   COALESCE(sources, '') AS sources,
-                   status, ip_address, timestamp
+        cur.execute(f"""
+            SELECT {select_fields}
             FROM audit_logs
             ORDER BY id DESC
             LIMIT ?
         """, (limit,))
     elif officer_user_id:
-        cur.execute("""
-            SELECT id,
-                   COALESCE(actor_user_id, 0) AS actor_user_id,
-                   COALESCE(actor_username, 'anonymous') AS actor_username,
-                   COALESCE(effective_role, 'unauthenticated') AS effective_role,
-                   effective_student_id,
-                   action, endpoint,
-                   COALESCE(detail, '') AS detail,
-                   COALESCE(sources, '') AS sources,
-                   status, ip_address, timestamp
+        cur.execute(f"""
+            SELECT {select_fields}
             FROM audit_logs
-            WHERE effective_role = 'student'
-               OR (effective_role = 'placement' AND actor_user_id = ?)
+            WHERE (
+                COALESCE(NULLIF(effective_role, ''), role) = 'student'
+                OR (COALESCE(NULLIF(effective_role, ''), role) = 'placement' AND (actor_user_id = ? OR user_id = ?))
+            )
+            AND actor_user_id NOT IN (SELECT id FROM users WHERE role = 'developer')
+            AND COALESCE(NULLIF(effective_role, ''), role) != 'developer'
             ORDER BY id DESC
             LIMIT ?
-        """, (str(officer_user_id), limit))
+        """, (int(officer_user_id), int(officer_user_id), limit))
     else:
         # Placement view fallback: show student and placement actions only
-        cur.execute("""
-            SELECT id,
-                   COALESCE(actor_user_id, 0) AS actor_user_id,
-                   COALESCE(actor_username, 'anonymous') AS actor_username,
-                   COALESCE(effective_role, 'unauthenticated') AS effective_role,
-                   effective_student_id,
-                   action, endpoint,
-                   COALESCE(detail, '') AS detail,
-                   COALESCE(sources, '') AS sources,
-                   status, ip_address, timestamp
+        cur.execute(f"""
+            SELECT {select_fields}
             FROM audit_logs
-            WHERE effective_role != 'developer'
+            WHERE COALESCE(NULLIF(effective_role, ''), role) != 'developer'
+              AND actor_user_id NOT IN (SELECT id FROM users WHERE role = 'developer')
             ORDER BY id DESC
             LIMIT ?
         """, (limit,))

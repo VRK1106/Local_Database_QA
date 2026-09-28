@@ -331,22 +331,24 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
                 <div style="background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 8px;">
                     <span style="font-size: 10px; color: var(--text-muted); display: block;">CGPA</span>
-                    <strong style="color: var(--accent-cyan); font-size: 14px;">{{ student_record.get('CGPA', '—') }}</strong>
+                    <strong style="color: var(--accent-cyan); font-size: 14px;">{{ student_record.get('cgpa') or student_record.get('CGPA') or '—' }}</strong>
                 </div>
                 <div style="background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 8px;">
-                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Branch</span>
-                    <strong style="color: #fff; font-size: 12px;">{{ student_record.get('Branch', '—') }}</strong>
+                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Specialization / Branch</span>
+                    <strong style="color: #fff; font-size: 12px;">{{ student_record.get('specialization') or student_record.get('Department') or student_record.get('Branch') or '—' }}</strong>
                 </div>
                 <div style="background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 8px;">
-                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Backlogs</span>
-                    <strong style="color: {% if student_record.get('Backlogs', 0)|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %}; font-size: 13px;">
-                        {{ student_record.get('Backlogs', 0) }}
+                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Active Backlogs</span>
+                    {% set num_backlogs = student_record.get('backlogs', student_record.get('Backlogs', 0)) %}
+                    <strong style="color: {% if num_backlogs|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %}; font-size: 13px;">
+                        {{ num_backlogs }}
                     </strong>
                 </div>
                 <div style="background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 8px;">
-                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Drive Status</span>
-                    <strong style="color: #fff; font-size: 11px;">
-                        {{ student_record.get('Placed_Company', 'Eligible') if student_record.get('Placed_Company') and student_record.get('Placed_Company') not in ['No', 'None', '-'] else 'Eligible' }}
+                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Placement Status</span>
+                    {% set p_status = student_record.get('placement_status') or student_record.get('Placement Status') or student_record.get('Placed_Company') or 'Eligible' %}
+                    <strong style="color: {% if 'placed' in p_status|lower and 'not' not in p_status|lower %}var(--accent-emerald){% else %}#cbd5e1{% endif %}; font-size: 12px;">
+                        {{ p_status }}
                     </strong>
                 </div>
             </div>
