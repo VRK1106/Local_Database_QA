@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}System Runtime Configuration | Developer Portal{% endblock %}
+{% block header_title %}Runtime Configuration & Parameters{% endblock %}
+
+{% block content %}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <!-- System Runtime Settings Card -->
+    <div class="glass-card">
+        <h3 style="font-size: 17px; font-weight: 600; color: #fff; margin-bottom: 16px;">
+            <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Active Server Parameters
+        </h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <tbody>
+                <tr style="border-bottom: 1px solid var(--bg-card-border);">
+                    <td style="padding: 10px 0; color: var(--text-muted);">Default LLM Model</td>
+                    <td style="padding: 10px 0; font-weight: 600; color: #fff;">{{ default_model }}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--bg-card-border);">
+                    <td style="padding: 10px 0; color: var(--text-muted);">Embedding Engine</td>
+                    <td style="padding: 10px 0; font-weight: 600; color: var(--accent-cyan);">{{ embedding_model }}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--bg-card-border);">
+                    <td style="padding: 10px 0; color: var(--text-muted);">Ollama Endpoint</td>
+                    <td style="padding: 10px 0; font-family: monospace; color: var(--text-main);">{{ ollama_url }}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--bg-card-border);">
+                    <td style="padding: 10px 0; color: var(--text-muted);">Vector Store Path</td>
+                    <td style="padding: 10px 0; font-family: monospace; font-size: 11.5px; color: var(--text-muted);">{{ chroma_path }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; color: var(--text-muted);">Authentication Store</td>
+                    <td style="padding: 10px 0; font-family: monospace; font-size: 11.5px; color: var(--text-muted);">{{ auth_db_path }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Permission Mapping Card -->
+    <div class="glass-card">
+        <h3 style="font-size: 17px; font-weight: 600; color: #fff; margin-bottom: 16px;">
+            <i class="fa-solid fa-key" style="color: var(--accent-purple);"></i> Active Permission Registry
+        </h3>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">
+            Hardcoded permissions verified server-side on every route and API call:
+        </p>
+        <div style="max-height: 240px; overflow-y: auto; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px;">
+            {% for r, perms in permissions_map.items() %}
+                <div style="margin-bottom: 10px;">
+                    <strong style="color: {% if r == 'developer' %}var(--accent-rose){% elif r == 'placement' %}var(--accent-cyan){% else %}var(--accent-purple){% endif %};">
+                        [{{ r|upper }}]:
+                    </strong>
+                    <div style="color: var(--text-muted); padding-left: 10px; margin-top: 2px;">
+                        {% for p in perms|sort %}
+                            <code>{{ p }}</code>{% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

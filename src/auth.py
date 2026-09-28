@@ -1,4 +1,4 @@
-"""Authentication, User Management, and Security Auditing for RBAC."""
+"""Authentication, Permission Registry, and Security Auditing for Portals and Developer Role."""
 
 from __future__ import annotations
 import sqlite3
@@ -12,8 +12,72 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from src.config import AUTH_DB_PATH
 
 
+# =========================================================================
+# Explicit Permissions Registry (One Core, Multi-Role)
+# =========================================================================
+
+PERMISSIONS = {
+    "student": {
+        "query.public",
+        "query.own_record",
+        "account.change_password",
+    },
+    "placement": {
+        "query.public",
+        "query.all",
+        "account.change_password",
+        "docs.upload",
+        "docs.delete",
+        "docs.inspect",
+        "docs.tag",
+        "users.import_students",
+        "users.reset_student_password",
+        "users.disable_student",
+        "audit.view_own_portal",
+    },
+}
+
+PERMISSIONS["developer"] = PERMISSIONS["placement"] | {
+    "query.own_record",
+    "users.create_placement",
+    "users.set_role",
+    "system.config",
+    "system.logs",
+    "audit.view_all",
+    "db.reindex",
+    "db.reset",
+    "impersonate.student",
+    "impersonate.placement",
+}
+
+
+def has_permission(user, perm: str) -> bool:
+    """
+    Check if the user holds a specific permission string.
+    During developer impersonation ('view_as'), permissions drop strictly to the target role.
+    Unknown or unregistered permissions safely fail-closed (return False).
+    """
+    if not user:
+        return False
+    role = getattr(user, "role", None)
+    if not role:
+        return False
+
+    from flask import session, has_request_context
+    if has_request_context():
+        view_as = session.get("view_as")
+        if role == "developer" and view_as:
+            role = view_as.get("role", role)
+
+    return perm in PERMISSIONS.get(role, set())
+
+
+# =========================================================================
+# User Model
+# =========================================================================
+
 class User(UserMixin):
-    """Flask-Login compatible User model."""
+    """Flask-Login compatible User model with role helpers."""
     def __init__(
         self,
         id: int,
@@ -42,6 +106,14 @@ class User(UserMixin):
     def is_student(self) -> bool:
         return self.role == "student"
 
+    @property
+    def is_developer(self) -> bool:
+        return self.role == "developer"
+
+    def has_permission(self, perm: str) -> bool:
+        """Check if user holds a specific permission string (considering view_as)."""
+        return has_permission(self, perm)
+
 
 def get_db_connection() -> sqlite3.Connection:
     """Return a thread-safe connection to the authentication SQLite database."""
@@ -51,7 +123,7 @@ def get_db_connection() -> sqlite3.Connection:
 
 
 def init_auth_db():
-    """Initialize SQLite tables for users and audit logs, creating default accounts if empty."""
+    """Initialize SQLite tables for users and enhanced audit logs, migrating schema if needed."""
     conn = get_db_connection()
     cur = conn.cursor()
 
@@ -71,12 +143,14 @@ def init_auth_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            username TEXT,
-            role TEXT,
+            actor_user_id INTEGER,
+            actor_username TEXT,
+            effective_role TEXT,
+            effective_student_id TEXT,
             action TEXT NOT NULL,
             endpoint TEXT NOT NULL,
-            query_text TEXT,
+            detail TEXT,
+            sources TEXT,
             status TEXT DEFAULT 'success',
             ip_address TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -84,8 +158,27 @@ def init_auth_db():
     """)
     conn.commit()
 
-    # Seed default placement administrator if no placement user exists
-    cur.execute("SELECT id FROM users WHERE role = 'placement' LIMIT 1;")
+    # Migration check for existing audit_logs columns
+    cur.execute("PRAGMA table_info(audit_logs);")
+    existing_cols = {row[1] for row in cur.fetchall()}
+    columns_to_add = [
+        ("actor_user_id", "INTEGER"),
+        ("actor_username", "TEXT"),
+        ("effective_role", "TEXT"),
+        ("effective_student_id", "TEXT"),
+        ("detail", "TEXT"),
+        ("sources", "TEXT"),
+    ]
+    for col_name, col_type in columns_to_add:
+        if col_name not in existing_cols:
+            try:
+                cur.execute(f"ALTER TABLE audit_logs ADD COLUMN {col_name} {col_type};")
+            except Exception:
+                pass
+    conn.commit()
+
+    # Seed default placement administrator if no placement/developer user exists
+    cur.execute("SELECT id FROM users WHERE role IN ('placement', 'developer') LIMIT 1;")
     if not cur.fetchone():
         admin_pass_hash = generate_password_hash("admin123")
         cur.execute("""
@@ -169,6 +262,72 @@ def create_user(
     return user_id
 
 
+def create_developer_account(username: str, password: str) -> int:
+    """CLI utility function to provision a new developer account with security checks."""
+    if len(password) < 12:
+        raise ValueError("Developer passwords must be at least 12 characters.")
+    return create_user(
+        username=username,
+        password=password,
+        role="developer",
+        student_id=None,
+        must_change_password=False
+    )
+
+
+def count_active_developers() -> int:
+    """Return count of active developer accounts in the system."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM users WHERE role = 'developer' AND active = 1;")
+    res = cur.fetchone()
+    count = res[0] if res else 0
+    conn.close()
+    return count
+
+
+def set_user_role(user_id: int | str, new_role: str) -> tuple[bool, str]:
+    """Change a user's role while enforcing that the last developer cannot be demoted."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT role, active FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return False, "User not found."
+
+    if row["role"] == "developer" and new_role != "developer":
+        if count_active_developers() <= 1:
+            conn.close()
+            return False, "Security constraint: The last active developer cannot be demoted."
+
+    cur.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
+    conn.commit()
+    conn.close()
+    return True, "Role updated successfully."
+
+
+def set_user_active_status(user_id: int | str, active: bool) -> tuple[bool, str]:
+    """Enable or disable account while guaranteeing the last developer cannot be disabled."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT role, active FROM users WHERE id = ?", (user_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return False, "User not found."
+
+    if row["role"] == "developer" and not active:
+        if count_active_developers() <= 1:
+            conn.close()
+            return False, "Security constraint: The last active developer cannot be disabled."
+
+    cur.execute("UPDATE users SET active = ? WHERE id = ?", (1 if active else 0, user_id))
+    conn.commit()
+    conn.close()
+    return True, "User active status updated."
+
+
 def update_password(user_id: int | str, new_password: str) -> bool:
     """Update user password and clear the must_change_password flag."""
     conn = get_db_connection()
@@ -186,29 +345,46 @@ def update_password(user_id: int | str, new_password: str) -> bool:
 
 
 def log_audit_event(
-    user_id: int | str | None,
-    username: str | None,
-    role: str | None,
-    action: str,
-    endpoint: str,
-    query_text: str = "",
+    actor_user_id: int | str | None = None,
+    actor_username: str | None = None,
+    effective_role: str | None = None,
+    action: str = "",
+    endpoint: str = "",
+    detail: str = "",
+    sources: str = "",
+    effective_student_id: str | None = None,
     status: str = "success",
-    ip_address: str = ""
+    ip_address: str = "",
+    # Backwards-compatibility keyword arguments:
+    user_id: int | str | None = None,
+    username: str | None = None,
+    role: str | None = None,
+    query_text: str = "",
 ):
-    """Record an audit trail entry for security compliance."""
+    """Record an immutable audit trail entry distinguishing real actor from effective role."""
     try:
+        final_actor_id = actor_user_id if actor_user_id is not None else user_id
+        final_actor_name = actor_username if actor_username is not None else (username or "anonymous")
+        final_role = effective_role if effective_role is not None else (role or "unauthenticated")
+        final_detail = detail or query_text
+
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO audit_logs (user_id, username, role, action, endpoint, query_text, status, ip_address)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO audit_logs (
+                actor_user_id, actor_username, effective_role, effective_student_id,
+                action, endpoint, detail, sources, status, ip_address
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            user_id,
-            username or "anonymous",
-            role or "unauthenticated",
+            final_actor_id,
+            final_actor_name,
+            final_role,
+            effective_student_id,
             action,
             endpoint,
-            query_text,
+            final_detail,
+            sources,
             status,
             ip_address
         ))
@@ -218,16 +394,44 @@ def log_audit_event(
         print(f"[AUDIT ERROR] Failed to record audit log: {e}")
 
 
-def get_audit_logs(limit: int = 150) -> list[dict]:
-    """Retrieve the most recent audit logs."""
+def get_audit_logs(limit: int = 150, include_developer_actions: bool = True) -> list[dict]:
+    """Retrieve recent audit logs, optionally filtering out developer actions if placement officer."""
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("""
-        SELECT id, user_id, username, role, action, endpoint, query_text, status, ip_address, timestamp
-        FROM audit_logs
-        ORDER BY id DESC
-        LIMIT ?
-    """, (limit,))
+    
+    if include_developer_actions:
+        cur.execute("""
+            SELECT id,
+                   COALESCE(actor_user_id, 0) AS actor_user_id,
+                   COALESCE(actor_username, 'anonymous') AS actor_username,
+                   COALESCE(effective_role, 'unauthenticated') AS effective_role,
+                   effective_student_id,
+                   action, endpoint,
+                   COALESCE(detail, '') AS detail,
+                   COALESCE(sources, '') AS sources,
+                   status, ip_address, timestamp
+            FROM audit_logs
+            ORDER BY id DESC
+            LIMIT ?
+        """, (limit,))
+    else:
+        # Placement view: show student and placement actions only
+        cur.execute("""
+            SELECT id,
+                   COALESCE(actor_user_id, 0) AS actor_user_id,
+                   COALESCE(actor_username, 'anonymous') AS actor_username,
+                   COALESCE(effective_role, 'unauthenticated') AS effective_role,
+                   effective_student_id,
+                   action, endpoint,
+                   COALESCE(detail, '') AS detail,
+                   COALESCE(sources, '') AS sources,
+                   status, ip_address, timestamp
+            FROM audit_logs
+            WHERE effective_role != 'developer'
+            ORDER BY id DESC
+            LIMIT ?
+        """, (limit,))
+
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
@@ -241,7 +445,7 @@ def generate_temp_password(length: int = 8) -> str:
 
 def import_students_from_csv(csv_content: str) -> tuple[int, int, list[dict]]:
     """
-    Import students from CSV text containing headers like (Roll Number / USN, Name, optional Email).
+    Import students from CSV text containing headers (Roll Number / USN, Name, optional Email).
     Generates accounts with temporary passwords and must_change_password=True.
     Returns (created_count, skipped_count, list_of_created_credentials).
     """
@@ -251,7 +455,6 @@ def import_students_from_csv(csv_content: str) -> tuple[int, int, list[dict]]:
     f = io.StringIO(csv_content)
     reader = csv.DictReader(f)
     
-    # Identify headers flexibly
     headers = [h.strip() for h in (reader.fieldnames or [])]
     id_col = None
     for h in headers:
@@ -260,7 +463,6 @@ def import_students_from_csv(csv_content: str) -> tuple[int, int, list[dict]]:
             break
 
     if not id_col:
-        # Fallback to first column
         id_col = headers[0] if headers else None
 
     if not id_col:
@@ -279,7 +481,6 @@ def import_students_from_csv(csv_content: str) -> tuple[int, int, list[dict]]:
             continue
 
         username = student_id_val.lower()
-        # Check if already exists
         cur.execute("SELECT id FROM users WHERE username = ?", (username,))
         if cur.fetchone():
             skipped += 1

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Danger Zone | Developer Portal{% endblock %}
+{% block header_title %}Developer Danger Zone{% endblock %}
+
+{% block content %}
+<div style="max-width: 650px; margin: 20px auto;">
+    <div class="glass-card" style="border: 1px solid rgba(244, 63, 94, 0.4); box-shadow: 0 0 30px rgba(244, 63, 94, 0.15);">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <div style="width: 56px; height: 56px; border-radius: 14px; background: rgba(244, 63, 94, 0.2); border: 1px solid rgba(244, 63, 94, 0.5); margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--accent-rose);">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 700; color: #fff;">Destructive Database Reset</h2>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: 6px;">
+                This operation is reserved exclusively for the <strong>Developer</strong> role. It wipes all ChromaDB collections and physical documents.
+            </p>
+        </div>
+
+        <div style="background: rgba(244, 63, 94, 0.1); border-left: 4px solid var(--accent-rose); padding: 14px; border-radius: 6px; font-size: 12.5px; color: #fecdd3; margin-bottom: 24px; line-height: 1.5;">
+            <strong><i class="fa-solid fa-shield-virus"></i> Security Constraints:</strong>
+            <ul style="padding-left: 18px; margin-top: 6px;">
+                <li>Requires re-authenticating with your developer password.</li>
+                <li>Requires typing the exact confirmation phrase: <code>RESET</code>.</li>
+                <li>Requires a typed justification reason (minimum 10 characters) recorded in the audit log.</li>
+            </ul>
+        </div>
+
+        <form method="POST" action="{{ url_for('dev_reset_db') }}">
+            <div style="margin-bottom: 18px;">
+                <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+                    <i class="fa-solid fa-lock"></i> Developer Password Confirmation
+                </label>
+                <input type="password" name="password" class="form-control" required placeholder="Enter your developer password" autocomplete="current-password">
+            </div>
+
+            <div style="margin-bottom: 18px;">
+                <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+                    <i class="fa-solid fa-keyboard"></i> Type <code style="color: var(--accent-rose); font-size: 14px;">RESET</code> to Confirm
+                </label>
+                <input type="text" name="confirm" class="form-control" required placeholder="Type RESET in all caps" pattern="RESET">
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+                    <i class="fa-solid fa-pen-to-square"></i> Reason for Purge (Audit Trail Compliance)
+                </label>
+                <textarea name="reason" class="form-control" required minlength="10" placeholder="e.g. Purging corrupted vector index for clean re-ingest (min 10 characters)" style="min-height: 80px;"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-danger" style="width: 100%; justify-content: center; padding: 12px; font-size: 14px;" onclick="return confirm('WARNING: Are you absolutely certain you want to wipe the entire database?')">
+                <i class="fa-solid fa-radiation"></i> Execute Verified Database Wipe
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

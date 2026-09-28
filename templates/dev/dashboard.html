@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Developer Control Center | Local DB QA System{% endblock %}
+{% block header_title %}Developer Operations & System Control{% endblock %}
+
+{% block content %}
+<!-- Developer Overview Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px;">
+    <!-- Active Role & Impersonation Widget -->
+    <div class="glass-card" style="border-left: 4px solid var(--accent-rose);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div>
+                <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Security Persona</span>
+                <h3 style="font-size: 18px; font-weight: 700; color: #fff; margin-top: 2px;">
+                    <i class="fa-solid fa-code"></i> Developer Authority
+                </h3>
+            </div>
+            <span class="status-badge" style="background: rgba(244, 63, 94, 0.2); color: var(--accent-rose);">Unrestricted Core</span>
+        </div>
+        <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 16px;">
+            You possess full database, user provisioning, and debugging privileges. Use the "View-As" feature to test scoped portals.
+        </p>
+        <div style="display: flex; gap: 8px;">
+            <a href="#impersonate-section" class="btn btn-primary" style="font-size: 12px; padding: 6px 12px;">
+                <i class="fa-solid fa-user-ninja"></i> Quick View-As
+            </a>
+            <a href="{{ url_for('dev_danger_page') }}" class="btn btn-danger" style="font-size: 12px; padding: 6px 12px;">
+                <i class="fa-solid fa-radiation"></i> Danger Zone
+            </a>
+        </div>
+    </div>
+
+    <!-- System Architecture & Scope Status -->
+    <div class="glass-card" style="border-left: 4px solid var(--accent-cyan);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div>
+                <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Active Query Engine Scope</span>
+                <h3 style="font-size: 18px; font-weight: 700; color: #fff; margin-top: 2px;">
+                    <i class="fa-solid fa-shield-halved"></i> {{ active_scope_name|capitalize }}Scope
+                </h3>
+            </div>
+            <span class="status-badge online"><span class="status-dot"></span> Active</span>
+        </div>
+        <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 16px;">
+            Vector metadata constraint: <code>{{ chroma_filter or 'None (All Documents Reachable)' }}</code>
+        </p>
+        <div style="font-size: 12px; color: var(--text-muted);">
+            SQL Mode: <strong style="color: var(--accent-cyan);">{{ sql_mode }}</strong>
+        </div>
+    </div>
+
+    <!-- System Quick Stats -->
+    <div class="glass-card" style="border-left: 4px solid var(--accent-purple);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div>
+                <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">System Statistics</span>
+                <h3 style="font-size: 18px; font-weight: 700; color: #fff; margin-top: 2px;">
+                    <i class="fa-solid fa-database"></i> {{ db_stats.sources }} Docs / {{ db_stats.total_chunks }} Chunks
+                </h3>
+            </div>
+            <span class="status-badge" style="background: rgba(139, 92, 246, 0.2); color: var(--accent-purple);">Audit OK</span>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <a href="{{ url_for('dev_users_page') }}" class="btn" style="background: rgba(255,255,255,0.06); color: #fff; font-size: 12px; padding: 6px 12px;">
+                <i class="fa-solid fa-users"></i> Users ({{ total_users }})
+            </a>
+            <a href="{{ url_for('dev_logs_page') }}" class="btn" style="background: rgba(255,255,255,0.06); color: #fff; font-size: 12px; padding: 6px 12px;">
+                <i class="fa-solid fa-clipboard-list"></i> Full Logs
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Impersonation ("View As") Testing Hub -->
+<div class="glass-card" id="impersonate-section">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fbbf24;">
+            <i class="fa-solid fa-user-ninja"></i>
+        </div>
+        <div>
+            <h3 style="font-size: 17px; font-weight: 600; color: #fff;">Impersonation Engine ("View As")</h3>
+            <p style="font-size: 12px; color: var(--text-muted);">
+                Test the application as a Student or Placement Coordinator without holding developer powers simultaneously.
+            </p>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <!-- Test as Student -->
+        <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--bg-card-border); border-radius: 10px; padding: 18px;">
+            <h4 style="font-size: 14px; font-weight: 600; color: var(--accent-purple); margin-bottom: 8px;">
+                <i class="fa-solid fa-graduation-cap"></i> Impersonate Student
+            </h4>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">
+                Drops extra permissions. Forces <code>StudentScope</code> (strictly public notices and personal row).
+            </p>
+            <form method="POST" action="{{ url_for('start_view_as') }}">
+                <input type="hidden" name="role" value="student">
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" name="student_id" class="form-control" placeholder="Target Student ID (e.g. STU001)" value="STU001" required style="font-size: 13px; padding: 8px 12px;">
+                    <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #8b5cf6, #3b82f6); white-space: nowrap;">
+                        View as Student
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Test as Placement Officer -->
+        <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--bg-card-border); border-radius: 10px; padding: 18px;">
+            <h4 style="font-size: 14px; font-weight: 600; color: var(--accent-cyan); margin-bottom: 8px;">
+                <i class="fa-solid fa-user-tie"></i> Impersonate Placement Officer
+            </h4>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">
+                Simulates coordinator portal access (internal documents + universal shortlists, but no danger zone).
+            </p>
+            <form method="POST" action="{{ url_for('start_view_as') }}">
+                <input type="hidden" name="role" value="placement">
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">
+                    View as Placement Officer
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Developer Quick Navigation -->
+<div class="glass-card">
+    <h3 style="font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 14px;">
+        <i class="fa-solid fa-compass" style="color: var(--accent-cyan);"></i> Developer Operations Portal Directory
+    </h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+        <a href="{{ url_for('dev_users_page') }}" class="btn" style="background: rgba(255,255,255,0.04); color: var(--text-main); justify-content: flex-start; padding: 12px;">
+            <i class="fa-solid fa-users-gear" style="color: var(--accent-purple);"></i> User & Role Authority
+        </a>
+        <a href="{{ url_for('dev_config_page') }}" class="btn" style="background: rgba(255,255,255,0.04); color: var(--text-main); justify-content: flex-start; padding: 12px;">
+            <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Runtime Engine Config
+        </a>
+        <a href="{{ url_for('dev_logs_page') }}" class="btn" style="background: rgba(255,255,255,0.04); color: var(--text-main); justify-content: flex-start; padding: 12px;">
+            <i class="fa-solid fa-file-waveform" style="color: var(--accent-emerald);"></i> Global Audit Trail
+        </a>
+        <a href="{{ url_for('dev_danger_page') }}" class="btn" style="background: rgba(244,63,94,0.1); color: var(--accent-rose); justify-content: flex-start; padding: 12px;">
+            <i class="fa-solid fa-triangle-exclamation"></i> Danger Zone (Reset DB)
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Developer User & Role Authority | Local DB QA System{% endblock %}
+{% block header_title %}User Roles & Permissions Administration{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+            <h3 style="font-size: 18px; font-weight: 700; color: #fff;">
+                <i class="fa-solid fa-users-gear" style="color: var(--accent-purple);"></i> System Users & Roles ({{ users|length }})
+            </h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                Manage account roles, authorization states, and credentials. (The last active developer cannot be demoted or disabled).
+            </p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('dev_dashboard') }}" class="btn btn-primary" style="font-size: 12px; padding: 8px 14px;">
+                <i class="fa-solid fa-arrow-left"></i> Developer Hub
+            </a>
+        </div>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+                <tr style="text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--bg-card-border);">
+                    <th style="padding: 10px;">ID</th>
+                    <th style="padding: 10px;">Username</th>
+                    <th style="padding: 10px;">Role</th>
+                    <th style="padding: 10px;">Bound Student ID</th>
+                    <th style="padding: 10px;">Account Status</th>
+                    <th style="padding: 10px;">Actions (Developer Authority)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.04);">
+                    <td style="padding: 10px; color: var(--text-muted);">{{ u.id }}</td>
+                    <td style="padding: 10px; font-weight: 600; color: #fff;">
+                        {{ u.username }}
+                        {% if u.id|string == current_user.id|string %}
+                            <span class="status-badge" style="font-size: 10px; padding: 2px 6px; background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); margin-left: 6px;">You</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 10px;">
+                        <span class="status-badge" style="font-size: 11px; padding: 2px 8px; background: {% if u.role == 'developer' %}rgba(244, 63, 94, 0.2); color: var(--accent-rose);{% elif u.role == 'placement' %}rgba(6, 182, 212, 0.2); color: var(--accent-cyan);{% else %}rgba(139, 92, 246, 0.2); color: var(--accent-purple);{% endif %}">
+                            {{ u.role|capitalize }}
+                        </span>
+                    </td>
+                    <td style="padding: 10px; color: var(--accent-cyan); font-family: monospace;">{{ u.student_id or '—' }}</td>
+                    <td style="padding: 10px;">
+                        {% if u.active %}
+                            <span class="status-badge online"><span class="status-dot"></span> Active</span>
+                        {% else %}
+                            <span class="status-badge offline"><span class="status-dot"></span> Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 10px;">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <!-- Change Role Dropdown Form -->
+                            <form method="POST" action="{{ url_for('dev_update_user_role') }}" style="display: inline-flex; gap: 4px;">
+                                <input type="hidden" name="user_id" value="{{ u.id }}">
+                                <select name="new_role" class="form-select" style="font-size: 11px; padding: 4px 8px; width: auto;" onchange="this.form.submit()">
+                                    <option value="student" {% if u.role == 'student' %}selected{% endif %}>Student</option>
+                                    <option value="placement" {% if u.role == 'placement' %}selected{% endif %}>Placement</option>
+                                    <option value="developer" {% if u.role == 'developer' %}selected{% endif %}>Developer</option>
+                                </select>
+                            </form>
+
+                            <!-- Toggle Status Form -->
+                            <form method="POST" action="{{ url_for('dev_toggle_user_status') }}" style="display: inline;">
+                                <input type="hidden" name="user_id" value="{{ u.id }}">
+                                {% if u.active %}
+                                    <input type="hidden" name="active" value="0">
+                                    <button type="submit" class="action-btn" style="background: rgba(244, 63, 94, 0.15); color: #f87171;" title="Disable Account">
+                                        <i class="fa-solid fa-user-slash"></i>
+                                    </button>
+                                {% else %}
+                                    <input type="hidden" name="active" value="1">
+                                    <button type="submit" class="action-btn" style="background: rgba(16, 185, 129, 0.15); color: #34d399;" title="Enable Account">
+                                        <i class="fa-solid fa-user-check"></i>
+                                    </button>
+                                {% endif %}
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
