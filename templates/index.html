@@ -6,23 +6,33 @@
 {% block extra_head %}
 <style>
     .qa-container {
-        display: flex;
-        gap: 24px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        gap: 28px;
         width: 100%;
-        align-items: flex-start;
-        transition: all 0.3s ease;
+        align-items: start;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .left-col {
-        flex: 1;
         min-width: 0;
-        transition: all 0.3s ease;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
     }
 
     .right-col {
-        width: 350px;
-        flex-shrink: 0;
-        transition: all 0.3s ease;
+        width: 380px;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .qa-container.panel-collapsed {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .qa-container.panel-collapsed .right-col {
@@ -63,7 +73,7 @@
         align-items: center;
         gap: 8px;
         transition: all 0.2s ease;
-        margin-bottom: 16px;
+        margin-bottom: 4px;
     }
 
     .qa-container.panel-collapsed .reopen-panel-btn {
@@ -78,38 +88,52 @@
 
     @media (max-width: 1150px) {
         .qa-container {
-            flex-direction: column;
-            gap: 20px;
+            grid-template-columns: 1fr;
+            gap: 24px;
         }
         .right-col {
             width: 100%;
         }
     }
 
+    /* Modern Prompt Studio Card */
     .query-box {
         background: var(--bg-card);
         border: 1px solid var(--bg-card-border);
-        border-radius: var(--radius-lg);
-        padding: 24px 26px;
-        backdrop-filter: blur(16px);
-        margin-bottom: 22px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        border-radius: 16px;
+        padding: 22px 24px;
+        backdrop-filter: blur(18px);
+        margin-bottom: 0;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
     }
 
+    .query-box:focus-within {
+        border-color: rgba(6, 182, 212, 0.45);
+        box-shadow: 0 14px 40px rgba(6, 182, 212, 0.12), 0 0 0 1px rgba(6, 182, 212, 0.25);
+    }
+
+    /* Segmented Pipeline Control Bar */
     .mode-selector {
         display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-bottom: 14px;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--bg-card-border);
+        border-radius: 12px;
+        padding: 4px;
+        gap: 4px;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .mode-btn {
-        flex: 1 1 auto;
-        min-width: 140px;
-        padding: 9px 12px;
-        border-radius: var(--radius-md);
-        border: 1px solid var(--bg-card-border);
-        background: rgba(255, 255, 255, 0.03);
+        flex: 1;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
         color: var(--text-muted);
         font-size: 12px;
         font-weight: 600;
@@ -117,65 +141,113 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 6px;
+        gap: 7px;
         white-space: nowrap;
-        transition: all 0.2s ease;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .mode-btn:hover {
+        color: var(--text-main);
+        background: rgba(255, 255, 255, 0.04);
     }
 
     .mode-btn.active {
-        background: rgba(6, 182, 212, 0.15);
+        background: rgba(6, 182, 212, 0.16);
         color: var(--accent-cyan);
-        border-color: var(--accent-cyan);
-        box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+        border-color: rgba(6, 182, 212, 0.35);
+        box-shadow: 0 2px 10px rgba(6, 182, 212, 0.15);
     }
 
     .query-input-wrapper {
         position: relative;
         display: flex;
-        gap: 10px;
+        flex-direction: column;
+        gap: 12px;
     }
 
     .query-textarea {
-        flex: 1;
-        min-height: 70px;
+        width: 100%;
+        min-height: 80px;
+        max-height: 240px;
         resize: vertical;
-        padding: 12px 14px;
+        padding: 14px 16px;
         font-family: inherit;
         border-radius: var(--radius-md);
-        background: var(--bg-input);
+        background: rgba(15, 23, 42, 0.6);
         border: 1px solid var(--bg-card-border);
         color: var(--text-main);
-        font-size: 14px;
+        font-size: 14.5px;
+        line-height: 1.5;
+        box-sizing: border-box;
+        transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .query-textarea:focus {
+        outline: none;
+        border-color: rgba(6, 182, 212, 0.45);
+        background: rgba(15, 23, 42, 0.85);
+    }
+
+    .query-bottom-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding-top: 2px;
+    }
+
+    .query-bottom-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .query-bottom-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .query-shortcut-hint {
+        font-size: 11.5px;
+        color: var(--text-muted);
+        opacity: 0.75;
     }
 
     .send-btn {
-        padding: 0 22px;
-        height: 70px;
+        padding: 8px 20px;
+        height: auto;
+        min-height: 38px;
         background: var(--gradient-primary);
         border: none;
         border-radius: var(--radius-md);
         color: #fff;
-        font-size: 14px;
+        font-size: 13.5px;
         font-weight: 600;
         cursor: pointer;
-        display: flex;
-        flex-direction: column;
+        display: inline-flex;
+        flex-direction: row;
         align-items: center;
         justify-content: center;
-        gap: 4px;
-        box-shadow: 0 4px 20px rgba(6, 182, 212, 0.35);
-        transition: all 0.2s ease;
+        gap: 8px;
+        box-shadow: 0 4px 16px rgba(6, 182, 212, 0.35);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .send-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 25px rgba(6, 182, 212, 0.5);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 22px rgba(6, 182, 212, 0.5);
+    }
+
+    .send-btn:active {
+        transform: scale(0.98);
     }
 
     .send-btn:disabled {
         opacity: 0.6;
         cursor: not-allowed;
         transform: none;
+        box-shadow: none;
     }
 
     /* Output Stream Section */
@@ -393,22 +465,24 @@
     }
 
     .mic-btn {
-        background: rgba(6, 182, 212, 0.15);
-        border: 1px solid var(--accent-cyan);
+        background: rgba(6, 182, 212, 0.12);
+        border: 1px solid rgba(6, 182, 212, 0.35);
         color: var(--accent-cyan);
-        padding: 10px 14px;
+        width: 38px;
+        height: 38px;
         border-radius: var(--radius-md);
         cursor: pointer;
         font-size: 14px;
         transition: all 0.2s ease;
-        display: flex;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
     }
 
     .mic-btn:hover {
         background: var(--accent-cyan);
-        color: #000;
+        color: #0b1120;
+        transform: scale(1.05);
     }
 
     .mic-btn.recording {
@@ -427,29 +501,137 @@
     .cursor-blink::after {
         content: '▋';
         animation: blink 1s infinite;
-    /* Quick Chips & Student Hub Styling */
-    .student-welcome-banner {
-        background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%);
-        border: 1px solid rgba(139, 92, 246, 0.3);
-        border-radius: var(--radius-md);
-        padding: 14px 18px;
-        margin-bottom: 16px;
+    }
+
+    /* Executive Student Hero Card */
+    .student-hero-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+        border: 1px solid rgba(139, 92, 246, 0.25);
+        border-radius: 16px;
+        padding: 22px 24px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(16px);
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+    }
+
+    .student-hero-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 16px;
         flex-wrap: wrap;
-        gap: 12px;
-        backdrop-filter: blur(12px);
     }
 
+    .student-identity {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .student-avatar-badge {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(6, 182, 212, 0.25));
+        border: 1px solid rgba(139, 92, 246, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--accent-cyan);
+        font-size: 20px;
+    }
+
+    .student-greeting-name {
+        font-family: 'Outfit', sans-serif;
+        font-size: 17px;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .student-greeting-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    .student-usn-badge {
+        color: var(--accent-cyan);
+        font-family: monospace;
+        font-weight: 600;
+    }
+
+    .student-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+    }
+
+    @media (max-width: 768px) {
+        .student-kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .kpi-mini-card {
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .kpi-mini-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .kpi-label {
+        font-size: 11px;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 500;
+    }
+
+    .kpi-value {
+        font-size: 16px;
+        font-weight: 700;
+        font-family: 'Outfit', sans-serif;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .kpi-value.cyan { color: var(--accent-cyan); }
+    .kpi-value.emerald { color: var(--accent-emerald); }
+    .kpi-value.amber { color: var(--accent-amber); }
+    .kpi-value.rose { color: var(--accent-rose); }
+    .kpi-value.white { color: #f8fafc; }
+
+    .kpi-foot {
+        font-size: 10px;
+        color: var(--text-muted);
+        opacity: 0.8;
+    }
+
+    /* Quick Chips Modern Tray */
     .quick-chips-container {
         display: flex;
         align-items: center;
         gap: 8px;
         overflow-x: auto;
-        padding-bottom: 6px;
-        margin-bottom: 12px;
-        scrollbar-width: thin;
+        padding-bottom: 2px;
+        scrollbar-width: none;
+    }
+
+    .quick-chips-container::-webkit-scrollbar {
+        display: none;
     }
 
     .quick-chip {
@@ -459,9 +641,9 @@
         background: rgba(255, 255, 255, 0.04);
         border: 1px solid var(--bg-card-border);
         color: var(--text-muted);
-        padding: 5px 12px;
+        padding: 6px 14px;
         border-radius: 20px;
-        font-size: 11.5px;
+        font-size: 12px;
         font-weight: 500;
         cursor: pointer;
         white-space: nowrap;
@@ -469,17 +651,48 @@
     }
 
     .quick-chip:hover {
-        background: rgba(6, 182, 212, 0.12);
+        background: rgba(6, 182, 212, 0.14);
         color: var(--accent-cyan);
         border-color: rgba(6, 182, 212, 0.4);
         transform: translateY(-1px);
+    }
+
+    /* Right Column Standardized Widget Cards */
+    .widget-box {
+        background: var(--bg-card);
+        border: 1px solid var(--bg-card-border);
+        border-radius: 16px;
+        padding: 20px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .widget-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .widget-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 14.5px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #fff;
     }
 
     .checklist-item {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 7px 10px;
+        padding: 8px 12px;
         border-radius: var(--radius-sm);
         background: rgba(255, 255, 255, 0.02);
         border: 1px solid rgba(255, 255, 255, 0.05);
@@ -512,43 +725,64 @@
         </button>
 
         {% if current_user.is_student %}
-        <!-- Personalized Student Welcome & Academic Glance Banner -->
-        <div class="student-welcome-banner">
-            <div>
-                <div style="font-size: 15px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
-                    <i class="fa-solid fa-graduation-cap" style="color: var(--accent-purple);"></i>
-                    Welcome, {{ current_user.username }}!
+        <!-- Executive Student Hero Card & 4-Stat KPI Grid -->
+        <div class="student-hero-card">
+            <div class="student-hero-header">
+                <div class="student-identity">
+                    <div class="student-avatar-badge">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                    </div>
+                    <div>
+                        <div class="student-greeting-name">
+                            Welcome back, {{ current_user.username }}!
+                        </div>
+                        <div class="student-greeting-sub">
+                            USN: <span class="student-usn-badge">{{ current_user.student_id or 'Verified Candidate' }}</span>
+                            &bull; Placement Intelligence Assistant
+                        </div>
+                    </div>
                 </div>
-                <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
-                    USN: <span style="color: var(--accent-cyan); font-family: monospace; font-weight: 600;">{{ current_user.student_id or 'Verified Candidate' }}</span>
-                    {% if student_record and student_record.get('Branch') %} | Branch: <strong style="color: #fff;">{{ student_record.get('Branch') }}</strong>{% endif %}
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="status-badge online" style="font-size: 11px; padding: 4px 10px;">
+                        <i class="fa-solid fa-shield-check"></i> Zero-Trust Secured
+                    </span>
+                    <a href="{{ url_for('profile_page') }}" class="btn" style="background: rgba(255, 255, 255, 0.08); color: #fff; padding: 5px 12px; font-size: 11.5px; border: 1px solid var(--bg-card-border); text-decoration: none; border-radius: var(--radius-md); display: inline-flex; align-items: center; gap: 6px;">
+                        Full Profile <i class="fa-solid fa-arrow-right"></i>
+                    </a>
                 </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                {% if student_record and student_record.get('Placed_Company') and student_record.get('Placed_Company') != 'No' and student_record.get('Placed_Company') != 'None' and student_record.get('Placed_Company') != '-' %}
-                <span class="status-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 11px; padding: 4px 10px;">
-                    <i class="fa-solid fa-trophy"></i> Placed ({{ student_record.get('Placed_Company') }})
-                </span>
-                {% elif student_record and student_record.get('CGPA') %}
-                <span class="status-badge" style="background: rgba(6, 182, 212, 0.2); color: var(--accent-cyan); font-size: 11px; padding: 4px 10px;">
-                    <i class="fa-solid fa-chart-line"></i> Verified CGPA: {{ student_record.get('CGPA') }}
-                </span>
-                {% else %}
-                <span class="status-badge" style="background: rgba(139, 92, 246, 0.2); color: var(--accent-purple); font-size: 11px; padding: 4px 10px;">
-                    <i class="fa-solid fa-shield-check"></i> Zero-Trust Protected
-                </span>
-                {% endif %}
-                <a href="{{ url_for('profile_page') }}" class="btn" style="background: rgba(255, 255, 255, 0.08); color: #fff; padding: 4px 10px; font-size: 11px; border: 1px solid var(--bg-card-border); text-decoration: none;">
-                    Full Profile <i class="fa-solid fa-arrow-right"></i>
-                </a>
+
+            <!-- 4 Balanced Mini-Stat KPI Cards -->
+            <div class="student-kpi-grid">
+                <div class="kpi-mini-card">
+                    <span class="kpi-label"><i class="fa-solid fa-chart-line" style="color: var(--accent-cyan);"></i> Verified CGPA</span>
+                    <div class="kpi-value cyan">{{ student_record.get('CGPA', '—') if student_record else '—' }}</div>
+                    <span class="kpi-foot">Scale: 10.0</span>
+                </div>
+                <div class="kpi-mini-card">
+                    <span class="kpi-label"><i class="fa-solid fa-code-branch" style="color: var(--accent-purple);"></i> Department</span>
+                    <div class="kpi-value white" title="{{ student_record.get('Branch', '—') if student_record else '—' }}">{{ student_record.get('Branch', 'General') if student_record else 'General' }}</div>
+                    <span class="kpi-foot">Academic Branch</span>
+                </div>
+                <div class="kpi-mini-card">
+                    <span class="kpi-label"><i class="fa-solid fa-circle-exclamation" style="color: {% if student_record and student_record.get('Backlogs', 0)|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %};"></i> Active Backlogs</span>
+                    <div class="kpi-value {% if student_record and student_record.get('Backlogs', 0)|int > 0 %}rose{% else %}emerald{% endif %}">{{ student_record.get('Backlogs', 0) if student_record else 0 }}</div>
+                    <span class="kpi-foot">{% if student_record and student_record.get('Backlogs', 0)|int == 0 %}Clear Record{% else %}Requires Clearing{% endif %}</span>
+                </div>
+                <div class="kpi-mini-card">
+                    <span class="kpi-label"><i class="fa-solid fa-trophy" style="color: var(--accent-amber);"></i> Drive Status</span>
+                    <div class="kpi-value amber" style="font-size: 13.5px;">{{ student_record.get('Placed_Company', 'Eligible') if student_record and student_record.get('Placed_Company') and student_record.get('Placed_Company') not in ['No', 'None', '-'] else 'Eligible' }}</div>
+                    <span class="kpi-foot">Campus Recruitment</span>
+                </div>
             </div>
         </div>
         {% endif %}
         
-        <!-- Query Box -->
+        <!-- Modern Unified Prompt Studio Card -->
         <form id="qa-form" class="query-box" onsubmit="handleQuerySubmit(event)">
             <input type="hidden" name="mode" id="selected-mode" value="{{ mode }}">
 
+            <!-- Segmented Pipeline Mode Controller -->
             <div class="mode-selector">
                 {% if current_user.is_developer %}
                 <button type="button" class="mode-btn {% if mode == 'rag' or not mode %}active{% endif %}" onclick="setMode('rag', event)">
@@ -562,7 +796,7 @@
                 </button>
                 {% elif current_user.is_placement %}
                 <button type="button" class="mode-btn {% if mode == 'rag' or not mode %}active{% endif %}" onclick="setMode('rag', event)">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> Document Search & AI Answer
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Document Search &amp; AI Answer
                 </button>
                 <button type="button" class="mode-btn {% if mode == 'direct' %}active{% endif %}" onclick="setMode('direct', event)">
                     <i class="fa-solid fa-comments"></i> General AI Assistant
@@ -581,7 +815,7 @@
             </div>
 
             <!-- Voice Activity Banner & Volume Level Bar -->
-            <div id="voice-status-banner" style="display: none; padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; margin-bottom: 12px; transition: all 0.3s ease;">
+            <div id="voice-status-banner" style="display: none; padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; margin-bottom: 2px; transition: all 0.3s ease;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                     <span id="voice-status-text">Listening...</span>
                     <span style="font-size: 11px; opacity: 0.8;" id="volume-val">Mic Input: 0%</span>
@@ -593,7 +827,7 @@
 
             <!-- Quick Suggestion Question Chips -->
             <div class="quick-chips-container">
-                <span style="font-size: 11px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 5px; margin-right: 4px; font-weight: 600;">
+                <span style="font-size: 11px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 5px; margin-right: 2px; font-weight: 600;">
                     <i class="fa-solid fa-lightbulb" style="color: var(--accent-amber);"></i> Quick:
                 </span>
                 {% if current_user.is_student %}
@@ -601,7 +835,7 @@
                     <i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i> Placement Eligibility
                 </button>
                 <button type="button" class="quick-chip" onclick="applySuggestion('What is the college policy on dream offers and PPOs?')">
-                    <i class="fa-solid fa-file-contract" style="color: var(--accent-cyan);"></i> PPO & Dream Policy
+                    <i class="fa-solid fa-file-contract" style="color: var(--accent-cyan);"></i> PPO &amp; Dream Policy
                 </button>
                 <button type="button" class="quick-chip" onclick="applySuggestion('What is my verified academic standing and CGPA recorded with placement cell?')">
                     <i class="fa-solid fa-graduation-cap" style="color: var(--accent-purple);"></i> My Academic Standing
@@ -622,16 +856,27 @@
                 {% endif %}
             </div>
 
+            <!-- Unified Interactive Prompt Input -->
             <div class="query-input-wrapper">
-                <textarea name="q" id="query-input" class="query-textarea" placeholder="Ask any question about your local database documents..." required>{{ query }}</textarea>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoiceSearch()" title="Voice Query (Speech-to-Text)">
-                        <i class="fa-solid fa-microphone" id="mic-icon"></i>
-                    </button>
-                    <button type="submit" id="submit-btn" class="send-btn">
-                        <i class="fa-solid fa-paper-plane" id="btn-icon"></i>
-                        <span id="btn-text">Ask AI</span>
-                    </button>
+                <textarea name="q" id="query-input" class="query-textarea" placeholder="Ask any question about your local database documents, circulars, or placement criteria..." required>{{ query }}</textarea>
+                
+                <div class="query-bottom-bar">
+                    <div class="query-bottom-left">
+                        <button type="button" id="mic-btn" class="mic-btn" onclick="toggleVoiceSearch()" title="Voice Query (Speech-to-Text)">
+                            <i class="fa-solid fa-microphone" id="mic-icon"></i>
+                        </button>
+                        <span class="status-badge" style="font-size: 11px; padding: 4px 10px; background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--bg-card-border); gap: 6px;">
+                            <i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i> 100% Local RAG
+                        </span>
+                    </div>
+
+                    <div class="query-bottom-right">
+                        <span class="query-shortcut-hint">Press <strong>Enter ↵</strong> to ask</span>
+                        <button type="submit" id="submit-btn" class="send-btn">
+                            <i class="fa-solid fa-paper-plane" id="btn-icon"></i>
+                            <span id="btn-text">Ask AI</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </form>
@@ -1038,6 +1283,20 @@
 
         // Initialize Student Readiness Checklist
         initChecklist();
+
+        // Keyboard Enter to submit (Shift+Enter for newline)
+        const qInput = document.getElementById('query-input');
+        if (qInput) {
+            qInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const form = document.getElementById('qa-form');
+                    if (form) {
+                        form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true }));
+                    }
+                }
+            });
+        }
     });
 
     function setMode(mode, evt) {

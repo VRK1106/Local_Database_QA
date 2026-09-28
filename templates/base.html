@@ -238,14 +238,14 @@
         }
 
         .topbar {
-            height: 60px;
+            height: 64px;
             border-bottom: 1px solid var(--bg-card-border);
-            background: rgba(15, 23, 42, 0.65);
-            backdrop-filter: blur(14px);
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 24px;
+            padding: 0 28px;
             position: sticky;
             top: 0;
             z-index: 90;
@@ -255,19 +255,97 @@
             font-family: 'Outfit', sans-serif;
             font-size: 17.5px;
             font-weight: 600;
+            letter-spacing: -0.01em;
         }
 
         .topbar-right {
             display: flex;
             align-items: center;
-            gap: 14px;
+            gap: 12px;
         }
 
         .content-area {
-            padding: 24px 32px;
+            padding: 28px 36px;
             flex: 1;
-            max-width: 100%;
+            width: 100%;
+            max-width: 1440px;
+            margin: 0 auto;
             overflow-x: hidden;
+        }
+
+        .user-pill-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--bg-card-border);
+            color: var(--text-main);
+            text-decoration: none;
+            font-size: 12.5px;
+            font-weight: 500;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .user-pill-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .user-pill-role {
+            font-size: 10.5px;
+            padding: 2px 7px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .nav-icon-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--bg-card-border);
+            color: var(--text-muted);
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-md);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 13.5px;
+            text-decoration: none;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .nav-icon-btn:hover {
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent-cyan);
+            border-color: rgba(6, 182, 212, 0.35);
+            transform: translateY(-1px);
+        }
+
+        .nav-icon-danger {
+            background: rgba(244, 63, 94, 0.08);
+            border: 1px solid rgba(244, 63, 94, 0.25);
+            color: var(--accent-rose);
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-md);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 13.5px;
+            text-decoration: none;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .nav-icon-danger:hover {
+            background: var(--accent-rose);
+            color: #fff;
+            border-color: var(--accent-rose);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(244, 63, 94, 0.35);
         }
 
         .sidebar-backdrop {
@@ -606,21 +684,25 @@
                 </div>
             </div>
             <div class="topbar-right">
-                <span class="status-badge online">
-                    <i class="fa-solid fa-shield-halved"></i> 100% Offline & Private
+                <span class="status-badge online" style="gap: 7px; padding: 5px 12px;">
+                    <i class="fa-solid fa-shield-halved"></i> 100% Offline &amp; Private
                 </span>
                 {% if current_user.is_authenticated %}
-                <a href="{{ url_for('profile_page') }}" class="status-badge" style="background: rgba(255,255,255,0.06); color: var(--text-main); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: background 0.2s;" title="View My Profile">
-                    <i class="fa-solid {% if current_user.is_developer %}fa-code{% elif current_user.is_placement %}fa-user-tie{% else %}fa-graduation-cap{% endif %}"></i> {{ current_user.username }} ({{ current_user.role|capitalize }})
+                <a href="{{ url_for('profile_page') }}" class="user-pill-btn" title="View My Profile">
+                    <i class="fa-solid {% if current_user.is_developer %}fa-code{% elif current_user.is_placement %}fa-user-tie{% else %}fa-graduation-cap{% endif %}" style="color: {% if current_user.is_developer %}var(--accent-rose){% elif current_user.is_placement %}var(--accent-cyan){% else %}var(--accent-purple){% endif %};"></i>
+                    <span>{{ current_user.username }}</span>
+                    <span class="user-pill-role" style="background: {% if current_user.is_developer %}rgba(244, 63, 94, 0.2); color: var(--accent-rose);{% elif current_user.is_placement %}rgba(6, 182, 212, 0.2); color: var(--accent-cyan);{% else %}rgba(139, 92, 246, 0.2); color: var(--accent-purple);{% endif %}">
+                        {{ current_user.role|capitalize }}
+                    </span>
                 </a>
-                <a href="{{ url_for('settings_page') }}" class="btn" style="background: rgba(255,255,255,0.08); color: var(--text-muted); padding: 4px 10px; font-size: 12px; border: 1px solid var(--bg-card-border);" title="System Preferences">
+                <a href="{{ url_for('settings_page') }}" class="nav-icon-btn" title="System Preferences">
                     <i class="fa-solid fa-gear"></i>
                 </a>
-                <a href="{{ url_for('logout') }}" class="btn btn-danger" style="padding: 4px 10px; font-size: 12px;" title="Sign Out">
+                <a href="{{ url_for('logout') }}" class="nav-icon-danger" title="Sign Out">
                     <i class="fa-solid fa-arrow-right-from-bracket"></i>
                 </a>
                 {% else %}
-                <a href="{{ url_for('login') }}" class="btn btn-primary" style="padding: 6px 14px; font-size: 12px;">
+                <a href="{{ url_for('login') }}" class="btn btn-primary" style="padding: 7px 16px; font-size: 13px; border-radius: var(--radius-md);">
                     <i class="fa-solid fa-right-to-bracket"></i> Sign In
                 </a>
                 {% endif %}
