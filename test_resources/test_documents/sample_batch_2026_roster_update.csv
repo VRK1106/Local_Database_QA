@@ -1,0 +1,6 @@
+StudentID,StudentName,Department,CGPA,TechScore,InternshipCompleted,OffersCount,CurrentStatus,DreamCompany
+STU001,Aarav Patel,Computer Science,8.65,4,Yes,1,Placed,Apex Global Technologies
+STU002,Bhavna Sen,Information Technology,7.90,3,Yes,0,In Process,Microsoft
+STU003,Chirag Reddy,Electronics and Communication,8.20,4,No,0,Eligible,Cisco Systems
+STU004,Divya Nair,Data Science,9.15,5,Yes,2,Dream Placed,Google Cloud
+STU005,Eshaan Verma,Mechanical Engineering,7.40,2,No,0,Eligible,Tata Motors

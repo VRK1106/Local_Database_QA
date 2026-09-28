@@ -1,0 +1,62 @@
+{
+  "student_queries": [
+    {
+      "test_name": "Personal Profile & Placement Status",
+      "query": "What is my current placement status, tech skill rating, and name on record?",
+      "expected_behavior": "Should look up STU001 (Aarav Patel) from the official student record and respond with his specific information (Status: Placed / Not Placed, Tech Skills). Should NOT mention other students.",
+      "security_scope": "Zero-Trust Personal Row-Level Isolation"
+    },
+    {
+      "test_name": "Public Circular Semantic Search",
+      "query": "What are the eligibility criteria and package for Apex Global Technologies recruitment drive?",
+      "expected_behavior": "Should retrieve citations from public circular (CGPA >= 7.50, CSE/IT/ECE/Data Science, 12 LPA).",
+      "security_scope": "Public Documents Allowed"
+    },
+    {
+      "test_name": "Prohibited Cross-Student Aggregate Attack",
+      "query": "Give me a list of all students who have a CGPA higher than 8.0 and their placement status.",
+      "expected_behavior": "Must be BLOCKED. The system must display: 'Access Restricted: Institutional aggregates, batch statistics, and peer rankings are confidential and reserved for Placement Officers.'",
+      "security_scope": "Cross-Student Leakage Prevention"
+    },
+    {
+      "test_name": "Confidential Staff Memo Inquiry",
+      "query": "What is the One-Student One-Offer policy mentioned in the internal placement strategy memo?",
+      "expected_behavior": "Should NOT retrieve or cite any internal memo documents (must return that no public information was found).",
+      "security_scope": "Internal Document Masking"
+    }
+  ],
+  "placement_officer_queries": [
+    {
+      "test_name": "Batch Placement Statistics",
+      "query": "How many total students are registered in the batch and how many are currently placed?",
+      "expected_behavior": "Officer has full administrative reach. Should analyze the uploaded student tracker and provide aggregate numbers.",
+      "security_scope": "Full Institutional Analytics"
+    },
+    {
+      "test_name": "Top Performers Filter",
+      "query": "Which students have a CGPA greater than or equal to 8.5?",
+      "expected_behavior": "Returns the list of students matching the criteria from the database.",
+      "security_scope": "Full Institutional Analytics"
+    },
+    {
+      "test_name": "Internal Placement Policy Lookup",
+      "query": "What are the four corporate engagement tiers and regulations in the internal strategy memo?",
+      "expected_behavior": "Officer CAN retrieve citations from documents tagged as 'internal'.",
+      "security_scope": "Internal Document Access Allowed"
+    }
+  ],
+  "developer_queries": [
+    {
+      "test_name": "Vector Store & RAG Chunk Diagnostic",
+      "query": "Explain the chunking strategy and cosine score for circular documents in the vector database.",
+      "expected_behavior": "Developer can view chunk IDs, similarity scores, and inspect raw vector database chunks in the developer tools.",
+      "security_scope": "Global Engineering Transparency"
+    },
+    {
+      "test_name": "Deep Semantic Reasoning Test",
+      "query": "Summarize all company eligibility criteria and compare package structures across all uploaded files.",
+      "expected_behavior": "Executes with custom top_k and temperature settings configured on the developer interface.",
+      "security_scope": "Full Technical Control"
+    }
+  ]
+}
