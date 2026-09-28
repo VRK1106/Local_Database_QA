@@ -427,12 +427,77 @@
     .cursor-blink::after {
         content: '▋';
         animation: blink 1s infinite;
-        color: var(--accent-cyan);
+    /* Quick Chips & Student Hub Styling */
+    .student-welcome-banner {
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        border-radius: var(--radius-md);
+        padding: 14px 18px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        backdrop-filter: blur(12px);
     }
 
-    @keyframes blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0; }
+    .quick-chips-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 6px;
+        margin-bottom: 12px;
+        scrollbar-width: thin;
+    }
+
+    .quick-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--bg-card-border);
+        color: var(--text-muted);
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 11.5px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+    }
+
+    .quick-chip:hover {
+        background: rgba(6, 182, 212, 0.12);
+        color: var(--accent-cyan);
+        border-color: rgba(6, 182, 212, 0.4);
+        transform: translateY(-1px);
+    }
+
+    .checklist-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: var(--radius-sm);
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        margin-bottom: 6px;
+        font-size: 12px;
+        color: var(--text-main);
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .checklist-item:hover {
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .checklist-item.completed span {
+        text-decoration: line-through;
+        color: var(--text-muted);
+        opacity: 0.7;
     }
 </style>
 {% endblock %}
@@ -441,10 +506,43 @@
 <div class="qa-container" id="qa-container">
     <!-- Left Column: Query Input & Answer Output -->
     <div class="left-col">
-        {% if not current_user.is_student %}
         <button type="button" id="reopen-panel-btn" class="reopen-panel-btn" onclick="toggleParametersPanel()">
-            <i class="fa-solid fa-sliders"></i> Show Preferences & Parameters
+            <i class="fa-solid {% if current_user.is_student %}fa-graduation-cap{% else %}fa-sliders{% endif %}"></i> 
+            {% if current_user.is_student %}Show Student Placement Hub{% elif current_user.is_placement %}Show Search Preferences{% else %}Show Parameters & Namespaces{% endif %}
         </button>
+
+        {% if current_user.is_student %}
+        <!-- Personalized Student Welcome & Academic Glance Banner -->
+        <div class="student-welcome-banner">
+            <div>
+                <div style="font-size: 15px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-graduation-cap" style="color: var(--accent-purple);"></i>
+                    Welcome, {{ current_user.username }}!
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
+                    USN: <span style="color: var(--accent-cyan); font-family: monospace; font-weight: 600;">{{ current_user.student_id or 'Verified Candidate' }}</span>
+                    {% if student_record and student_record.get('Branch') %} | Branch: <strong style="color: #fff;">{{ student_record.get('Branch') }}</strong>{% endif %}
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                {% if student_record and student_record.get('Placed_Company') and student_record.get('Placed_Company') != 'No' and student_record.get('Placed_Company') != 'None' and student_record.get('Placed_Company') != '-' %}
+                <span class="status-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 11px; padding: 4px 10px;">
+                    <i class="fa-solid fa-trophy"></i> Placed ({{ student_record.get('Placed_Company') }})
+                </span>
+                {% elif student_record and student_record.get('CGPA') %}
+                <span class="status-badge" style="background: rgba(6, 182, 212, 0.2); color: var(--accent-cyan); font-size: 11px; padding: 4px 10px;">
+                    <i class="fa-solid fa-chart-line"></i> Verified CGPA: {{ student_record.get('CGPA') }}
+                </span>
+                {% else %}
+                <span class="status-badge" style="background: rgba(139, 92, 246, 0.2); color: var(--accent-purple); font-size: 11px; padding: 4px 10px;">
+                    <i class="fa-solid fa-shield-check"></i> Zero-Trust Protected
+                </span>
+                {% endif %}
+                <a href="{{ url_for('profile_page') }}" class="btn" style="background: rgba(255, 255, 255, 0.08); color: #fff; padding: 4px 10px; font-size: 11px; border: 1px solid var(--bg-card-border); text-decoration: none;">
+                    Full Profile <i class="fa-solid fa-arrow-right"></i>
+                </a>
+            </div>
+        </div>
         {% endif %}
         
         <!-- Query Box -->
@@ -491,6 +589,37 @@
                 <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden;">
                     <div id="mic-volume-bar" style="width: 0%; height: 100%; background: var(--accent-cyan); transition: width 0.05s linear;"></div>
                 </div>
+            </div>
+
+            <!-- Quick Suggestion Question Chips -->
+            <div class="quick-chips-container">
+                <span style="font-size: 11px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 5px; margin-right: 4px; font-weight: 600;">
+                    <i class="fa-solid fa-lightbulb" style="color: var(--accent-amber);"></i> Quick:
+                </span>
+                {% if current_user.is_student %}
+                <button type="button" class="quick-chip" onclick="applySuggestion('Am I eligible for upcoming campus placement drives?')">
+                    <i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i> Placement Eligibility
+                </button>
+                <button type="button" class="quick-chip" onclick="applySuggestion('What is the college policy on dream offers and PPOs?')">
+                    <i class="fa-solid fa-file-contract" style="color: var(--accent-cyan);"></i> PPO & Dream Policy
+                </button>
+                <button type="button" class="quick-chip" onclick="applySuggestion('What is my verified academic standing and CGPA recorded with placement cell?')">
+                    <i class="fa-solid fa-graduation-cap" style="color: var(--accent-purple);"></i> My Academic Standing
+                </button>
+                <button type="button" class="quick-chip" onclick="applySuggestion('What are the minimum eligibility criteria and backlogs allowed for Tier-1 companies?')">
+                    <i class="fa-solid fa-building-columns" style="color: var(--accent-amber);"></i> Tier-1 Criteria
+                </button>
+                {% else %}
+                <button type="button" class="quick-chip" onclick="applySuggestion('List the placement eligibility criteria for visiting companies')">
+                    <i class="fa-solid fa-magnifying-glass" style="color: var(--accent-cyan);"></i> Eligibility Criteria
+                </button>
+                <button type="button" class="quick-chip" onclick="applySuggestion('Summarize the latest placement circulars and schedules')">
+                    <i class="fa-solid fa-newspaper" style="color: var(--accent-purple);"></i> Recent Circulars
+                </button>
+                <button type="button" class="quick-chip" onclick="applySuggestion('What are the attendance requirements for placement training sessions?')">
+                    <i class="fa-solid fa-user-clock" style="color: var(--accent-amber);"></i> Training Attendance
+                </button>
+                {% endif %}
             </div>
 
             <div class="query-input-wrapper">
@@ -727,6 +856,134 @@
             </div>
         </div>
     </div>
+    {% elif current_user.is_student %}
+    <!-- Right Column: Student Placement Hub (Academic Snapshot, Public Circulars, Readiness) -->
+    <div class="right-col" id="qa-right-col">
+        <div class="options-panel">
+            <div class="panel-title" style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 8px; font-family: 'Outfit', sans-serif;">
+                    <i class="fa-solid fa-graduation-cap" style="color: var(--accent-cyan);"></i> Student Placement Hub
+                </span>
+                <button type="button" class="panel-toggle-btn" onclick="toggleParametersPanel()" title="Collapse Panel">
+                    <i class="fa-solid fa-angles-right"></i>
+                </button>
+            </div>
+
+            <!-- Card 1: Verified Academic Snapshot -->
+            <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; border: 1px solid var(--bg-card-border);">
+                <div style="font-size: 12px; font-weight: 600; color: #e2e8f0; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span><i class="fa-solid fa-id-card" style="color: var(--accent-purple);"></i> Verified Record</span>
+                    <span style="font-size: 10px; color: var(--accent-emerald); font-weight: 500;"><i class="fa-solid fa-shield-check"></i> Official</span>
+                </div>
+                {% if student_record %}
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11.5px;">
+                    <div style="background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px;">
+                        <span style="color: var(--text-muted); font-size: 10px; display: block;">CGPA</span>
+                        <strong style="color: var(--accent-cyan); font-size: 14px;">{{ student_record.get('CGPA', '—') }}</strong>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px;">
+                        <span style="color: var(--text-muted); font-size: 10px; display: block;">Branch</span>
+                        <strong style="color: #fff; font-size: 12px;">{{ student_record.get('Branch', '—') }}</strong>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px;">
+                        <span style="color: var(--text-muted); font-size: 10px; display: block;">Active Backlogs</span>
+                        <strong style="color: {% if student_record.get('Backlogs', 0)|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %}; font-size: 13px;">
+                            {{ student_record.get('Backlogs', 0) }}
+                        </strong>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px;">
+                        <span style="color: var(--text-muted); font-size: 10px; display: block;">Drive Status</span>
+                        <strong style="color: #fff; font-size: 11px;">
+                            {{ student_record.get('Placed_Company', 'Eligible') if student_record.get('Placed_Company') and student_record.get('Placed_Company') != 'No' and student_record.get('Placed_Company') != 'None' and student_record.get('Placed_Company') != '-' else 'Eligible' }}
+                        </strong>
+                    </div>
+                </div>
+                {% else %}
+                <div style="font-size: 11.5px; color: var(--text-muted); text-align: center; padding: 8px 0;">
+                    <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--accent-cyan);"></i> Roster sync in progress.
+                </div>
+                {% endif %}
+                <div style="text-align: right; margin-top: 8px;">
+                    <a href="{{ url_for('profile_page') }}" style="font-size: 11px; color: var(--accent-cyan); text-decoration: none;">
+                        Detailed Profile &rarr;
+                    </a>
+                </div>
+            </div>
+
+            <!-- Card 2: Official Public Circulars & Policies -->
+            <div class="form-group">
+                <label class="form-label" style="font-size: 12px; font-weight: 600; color: #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+                    <span><i class="fa-solid fa-bullhorn" style="color: var(--accent-amber);"></i> Placement Circulars</span>
+                    <span style="font-size: 10px; color: var(--text-muted);">{{ public_docs|length if public_docs else 0 }} available</span>
+                </label>
+                <div class="doc-filter-list" style="max-height: 160px; overflow-y: auto;">
+                    {% if public_docs %}
+                        {% for doc in public_docs %}
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 7px 8px; border-bottom: 1px dashed rgba(255,255,255,0.06); font-size: 12px;">
+                                <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;" title="{{ doc.name }}">
+                                    <i class="fa-solid fa-file-lines" style="color: var(--accent-cyan); font-size: 11px;"></i>
+                                    <span style="color: var(--text-main); font-weight: 500;">{{ doc.name }}</span>
+                                </div>
+                                <a href="{{ url_for('view_document', filename=doc.name) }}" target="_blank" class="btn" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); padding: 2px 7px; font-size: 10.5px; border: 1px solid rgba(6, 182, 212, 0.3); border-radius: 4px; text-decoration: none;" title="Open document">
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i> View
+                                </a>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="font-size: 11.5px; color: var(--text-muted); padding: 8px; text-align: center;">
+                            No public circulars published yet.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Card 3: Recruitment Readiness Checklist -->
+            <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; border: 1px solid var(--bg-card-border);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 12px; font-weight: 600; color: #e2e8f0;">
+                        <i class="fa-solid fa-list-check" style="color: var(--accent-emerald);"></i> Placement Readiness
+                    </span>
+                    <span id="readiness-percent" style="font-size: 11px; font-weight: 700; color: var(--accent-emerald);">0%</span>
+                </div>
+                <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 10px;">
+                    <div id="readiness-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-emerald)); transition: width 0.3s ease;"></div>
+                </div>
+                <div id="student-checklist">
+                    <label class="checklist-item" onclick="updateChecklist('resume')">
+                        <input type="checkbox" id="check-resume" style="accent-color: var(--accent-emerald);">
+                        <span>Updated ATS-friendly Resume</span>
+                    </label>
+                    <label class="checklist-item" onclick="updateChecklist('portfolio')">
+                        <input type="checkbox" id="check-portfolio" style="accent-color: var(--accent-emerald);">
+                        <span>GitHub / Portfolio Projects Live</span>
+                    </label>
+                    <label class="checklist-item" onclick="updateChecklist('aptitude')">
+                        <input type="checkbox" id="check-aptitude" style="accent-color: var(--accent-emerald);">
+                        <span>Aptitude & Reasoning Practice</span>
+                    </label>
+                    <label class="checklist-item" onclick="updateChecklist('core_tech')">
+                        <input type="checkbox" id="check-core_tech" style="accent-color: var(--accent-emerald);">
+                        <span>Core CS Subjects & DSA Review</span>
+                    </label>
+                    <label class="checklist-item" onclick="updateChecklist('mock_hr')">
+                        <input type="checkbox" id="check-mock_hr" style="accent-color: var(--accent-emerald);">
+                        <span>HR & Behavioral Prep Completed</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Voice Dispatcher for Students -->
+            <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--bg-card-border);">
+                <label class="form-label" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 2px;">
+                    <span style="font-size: 12px; font-weight: 600; color: #e2e8f0;">
+                        <i class="fa-solid fa-volume-high" style="color: var(--accent-cyan);"></i> Read Answers Aloud
+                    </span>
+                    <input type="checkbox" id="tts-checkbox" style="accent-color: var(--accent-cyan); width: 16px; height: 16px; cursor: pointer;">
+                </label>
+                <div style="font-size: 10.5px; color: var(--text-muted);">Listen to assistant answers via audio synthesis.</div>
+            </div>
+        </div>
+    </div>
     {% endif %}
 </div>
 {% endblock %}
@@ -778,6 +1035,9 @@
                 answerTextDiv.textContent = formatted;
             }
         }
+
+        // Initialize Student Readiness Checklist
+        initChecklist();
     });
 
     function setMode(mode, evt) {
@@ -1160,7 +1420,76 @@
         }, 2500);
     });
 
-    // Voice Readout (Text-to-Speech) Implementation
+    // Quick Question Suggestion Dispatcher
+    function applySuggestion(text) {
+        const input = document.getElementById('query-input');
+        if (input) {
+            input.value = text;
+            input.focus();
+            const form = document.getElementById('qa-form');
+            if (form) {
+                handleQuerySubmit(new Event('submit'));
+            }
+        }
+    }
+
+    // Student Recruitment Readiness Checklist Persistence
+    const CHECKLIST_KEY = 'student_readiness_' + '{{ current_user.username if current_user.is_authenticated else "guest" }}';
+
+    function initChecklist() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(CHECKLIST_KEY) || '{}');
+            const items = ['resume', 'portfolio', 'aptitude', 'core_tech', 'mock_hr'];
+            let checkedCount = 0;
+            items.forEach(id => {
+                const cb = document.getElementById('check-' + id);
+                if (cb) {
+                    cb.checked = !!saved[id];
+                    if (cb.checked) {
+                        checkedCount++;
+                        cb.closest('.checklist-item')?.classList.add('completed');
+                    } else {
+                        cb.closest('.checklist-item')?.classList.remove('completed');
+                    }
+                }
+            });
+            const pct = Math.round((checkedCount / items.length) * 100);
+            const bar = document.getElementById('readiness-bar');
+            const text = document.getElementById('readiness-percent');
+            if (bar) bar.style.width = pct + '%';
+            if (text) text.innerText = pct + '%';
+        } catch(e) {}
+    }
+
+    function updateChecklist(id) {
+        setTimeout(() => {
+            try {
+                const items = ['resume', 'portfolio', 'aptitude', 'core_tech', 'mock_hr'];
+                const saved = {};
+                let checkedCount = 0;
+                items.forEach(item => {
+                    const cb = document.getElementById('check-' + item);
+                    if (cb) {
+                        saved[item] = cb.checked;
+                        if (cb.checked) {
+                            checkedCount++;
+                            cb.closest('.checklist-item')?.classList.add('completed');
+                        } else {
+                            cb.closest('.checklist-item')?.classList.remove('completed');
+                        }
+                    }
+                });
+                localStorage.setItem(CHECKLIST_KEY, JSON.stringify(saved));
+                const pct = Math.round((checkedCount / items.length) * 100);
+                const bar = document.getElementById('readiness-bar');
+                const text = document.getElementById('readiness-percent');
+                if (bar) bar.style.width = pct + '%';
+                if (text) text.innerText = pct + '%';
+            } catch(e) {}
+        }, 10);
+    }
+
+    // Voice Readout (Text-to-Speech) Implementation with Saved Preferences
     function speakAnswerText(markdownText) {
         if (!('speechSynthesis' in window)) return;
         const ttsEnabled = document.getElementById('tts-checkbox')?.checked;
@@ -1171,6 +1500,21 @@
         const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
+
+        // Apply saved user preferences from settings
+        try {
+            const savedRate = localStorage.getItem('app_tts_rate');
+            if (savedRate) utterance.rate = parseFloat(savedRate);
+            const savedPitch = localStorage.getItem('app_tts_pitch');
+            if (savedPitch) utterance.pitch = parseFloat(savedPitch);
+            const savedVoice = localStorage.getItem('app_tts_voice');
+            if (savedVoice) {
+                const voices = window.speechSynthesis.getVoices();
+                const matched = voices.find(v => v.name === savedVoice);
+                if (matched) utterance.voice = matched;
+            }
+        } catch(e) {}
+
         window.speechSynthesis.speak(utterance);
     }
 </script>

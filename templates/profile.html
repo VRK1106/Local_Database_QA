@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}User Profile | Local DB QA System{% endblock %}
+{% block header_title %}User Account & Persona Profile{% endblock %}
+
+{% block content %}
+<div style="max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+    <!-- User Header Banner -->
+    <div class="glass-card" style="padding: 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; border-left: 5px solid {% if current_user.is_developer %}var(--accent-rose){% elif current_user.is_placement %}var(--accent-cyan){% else %}var(--accent-purple){% endif %};">
+        <div style="display: flex; align-items: center; gap: 18px;">
+            <div style="width: 64px; height: 64px; border-radius: 16px; background: {% if current_user.is_developer %}rgba(244, 63, 94, 0.2){% elif current_user.is_placement %}rgba(6, 182, 212, 0.2){% else %}rgba(139, 92, 246, 0.2){% endif %}; display: flex; align-items: center; justify-content: center; font-size: 28px; color: {% if current_user.is_developer %}var(--accent-rose){% elif current_user.is_placement %}var(--accent-cyan){% else %}var(--accent-purple){% endif %}; border: 1px solid rgba(255,255,255,0.1);">
+                <i class="fa-solid {% if current_user.is_developer %}fa-code{% elif current_user.is_placement %}fa-user-tie{% else %}fa-user-graduate{% endif %}"></i>
+            </div>
+            <div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h2 style="font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 700; color: #fff;">
+                        {{ student_record.name if (student_record and student_record.name) else current_user.username }}
+                    </h2>
+                    <span class="status-badge" style="font-size: 11px; padding: 3px 10px; background: {% if current_user.is_developer %}rgba(244, 63, 94, 0.2); color: var(--accent-rose);{% elif current_user.is_placement %}rgba(6, 182, 212, 0.2); color: var(--accent-cyan);{% else %}rgba(139, 92, 246, 0.2); color: var(--accent-purple);{% endif %};">
+                        {{ current_user.role|capitalize }}
+                    </span>
+                </div>
+                <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 16px; flex-wrap: wrap;">
+                    <span><i class="fa-solid fa-id-card"></i> Username: <code>{{ current_user.username }}</code></span>
+                    {% if current_user.student_id %}
+                    <span><i class="fa-solid fa-hashtag"></i> Student ID / USN: <strong style="color: var(--accent-cyan);">{{ current_user.student_id }}</strong></span>
+                    {% endif %}
+                    <span><i class="fa-solid fa-shield-halved"></i> Zero-Trust Scope: <strong style="color: #cbd5e1;">{{ current_user.role|capitalize }}Scope</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('settings_page') }}" class="btn" style="background: rgba(255,255,255,0.06); color: #fff; font-size: 13px; padding: 8px 16px;">
+                <i class="fa-solid fa-sliders"></i> Preferences
+            </a>
+            <a href="{{ url_for('change_password') }}" class="btn btn-primary" style="font-size: 13px; padding: 8px 16px;">
+                <i class="fa-solid fa-key"></i> Change Password
+            </a>
+        </div>
+    </div>
+
+    {% if current_user.is_student %}
+    <!-- Student Verified Academic & Placement Record -->
+    <div class="glass-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; color: #fff; display: flex; align-items: center; gap: 10px;">
+                <i class="fa-solid fa-graduation-cap" style="color: var(--accent-purple);"></i> Verified Placement Database Record
+            </h3>
+            <span class="status-badge online"><i class="fa-solid fa-circle-check"></i> Department Verified</span>
+        </div>
+
+        {% if student_record %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
+            {% for key, val in student_record.items() %}
+            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--bg-card-border); border-radius: 10px; padding: 14px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; margin-bottom: 4px;">
+                    {{ key.replace('_', ' ') }}
+                </div>
+                <div style="font-size: 15px; font-weight: 700; color: #fff; word-break: break-word;">
+                    {{ val if val is not none and val != '' else '—' }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 30px; color: var(--text-muted); background: rgba(0,0,0,0.2); border-radius: 8px;">
+            <i class="fa-solid fa-file-circle-question" style="font-size: 32px; margin-bottom: 10px; display: block; color: var(--accent-cyan);"></i>
+            No direct row found matching Student ID <code>{{ current_user.student_id or current_user.username }}</code> in active spreadsheets. 
+            Once the placement officer uploads the updated candidate roster, your verified metrics will populate automatically.
+        </div>
+        {% endif %}
+
+        <div style="background: rgba(6, 182, 212, 0.08); border: 1px dashed rgba(6, 182, 212, 0.3); border-radius: 8px; padding: 12px 16px; font-size: 12.5px; color: var(--text-muted); display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-circle-info" style="color: var(--accent-cyan); font-size: 16px;"></i>
+            <span>Notice an error or outdated CGPA in your official record? Please reach out to your departmental Placement Coordinator with your semester grade card.</span>
+        </div>
+    </div>
+    {% elif current_user.is_placement %}
+    <!-- Placement Officer Operational Summary -->
+    <div class="glass-card">
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-briefcase" style="color: var(--accent-cyan);"></i> Placement Office Authority Overview
+        </h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--bg-card-border); border-radius: 10px; padding: 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Managed User Accounts</div>
+                <div style="font-size: 24px; font-weight: 700; color: var(--accent-cyan); margin: 6px 0;">{{ total_users }} Accounts</div>
+                <a href="{{ url_for('admin_users_page') }}" style="font-size: 12px; color: var(--text-muted); text-decoration: none;"><i class="fa-solid fa-arrow-right"></i> Manage Students</a>
+            </div>
+            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--bg-card-border); border-radius: 10px; padding: 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Indexed Documents</div>
+                <div style="font-size: 24px; font-weight: 700; color: var(--accent-emerald); margin: 6px 0;">{{ db_stats.sources }} Files</div>
+                <a href="{{ url_for('documents_page') }}" style="font-size: 12px; color: var(--text-muted); text-decoration: none;"><i class="fa-solid fa-arrow-right"></i> Ingestion Manager</a>
+            </div>
+            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--bg-card-border); border-radius: 10px; padding: 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Audit Trail</div>
+                <div style="font-size: 24px; font-weight: 700; color: var(--accent-purple); margin: 6px 0;">Active</div>
+                <a href="{{ url_for('audit_logs_page') }}" style="font-size: 12px; color: var(--text-muted); text-decoration: none;"><i class="fa-solid fa-arrow-right"></i> View Activity Logs</a>
+            </div>
+        </div>
+    </div>
+    {% elif current_user.is_developer %}
+    <!-- Developer Authority Overview -->
+    <div class="glass-card">
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-terminal" style="color: var(--accent-rose);"></i> Developer Core Operations Overview
+        </h3>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">
+            You possess full root privileges across ChromaDB vector namespaces, raw file storage, user provisioning, and runtime model configurations.
+        </p>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <a href="{{ url_for('dev_dashboard') }}" class="btn btn-primary" style="font-size: 13px;">
+                <i class="fa-solid fa-code"></i> Developer Control Center
+            </a>
+            <a href="{{ url_for('system_info_page') }}" class="btn" style="background: rgba(255,255,255,0.06); color: #fff; font-size: 13px;">
+                <i class="fa-solid fa-server"></i> System Diagnostics
+            </a>
+            <a href="{{ url_for('dev_danger_page') }}" class="btn btn-danger" style="font-size: 13px;">
+                <i class="fa-solid fa-radiation"></i> Danger Zone
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Account Security & Offline Privacy Status -->
+    <div class="glass-card">
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 18px; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i> Account Security & Offline Privacy
+        </h3>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+            <div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                <i class="fa-solid fa-lock" style="color: var(--accent-emerald); font-size: 18px; margin-top: 2px;"></i>
+                <div>
+                    <div style="font-weight: 600; font-size: 13.5px; color: #fff;">100% Offline Storage</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">No external APIs, cloud servers, or third-party analytics. All data stays local.</div>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                <i class="fa-solid fa-user-shield" style="color: var(--accent-cyan); font-size: 18px; margin-top: 2px;"></i>
+                <div>
+                    <div style="font-weight: 600; font-size: 13.5px; color: #fff;">Zero-Trust Scoping</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">Server-enforced query scopes prevent cross-student record visibility.</div>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                <i class="fa-solid fa-key" style="color: #fbbf24; font-size: 18px; margin-top: 2px;"></i>
+                <div>
+                    <div style="font-weight: 600; font-size: 13.5px; color: #fff;">Password Status</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                        {% if current_user.must_change_password %}
+                        <span style="color: #fbbf24;">Temporary password active — update recommended.</span>
+                        {% else %}
+                        <span style="color: var(--accent-emerald);">Personal password verified and secure.</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

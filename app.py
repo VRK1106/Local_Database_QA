@@ -74,7 +74,8 @@ from src.ollama_client import (
 from src.structured_query import (
     is_aggregate_query,
     execute_universal_structured_query,
-    execute_student_scoped_query
+    execute_student_scoped_query,
+    get_student_record
 )
 from src.auth import (
     init_auth_db,
@@ -778,6 +779,15 @@ def index():
                     answer = generate_ollama_answer(prompt=query, model_name=selected_model)
                     generation_time = round(time.time() - t2, 3)
 
+    student_record = None
+    if scope.name == "student" and scope.bound_student_id():
+        try:
+            student_record = get_student_record(scope.bound_student_id(), Path(DOCUMENTS_DIR))
+        except Exception:
+            student_record = None
+
+    public_docs = [d for d in (db_stats.get('source_details') or []) if d.get('visibility') == 'public']
+
     return render_template(
         'index.html',
         query=query,
@@ -789,6 +799,8 @@ def index():
         answer=answer,
         retrieval_time=retrieval_time,
         generation_time=generation_time,
+        student_record=student_record,
+        public_docs=public_docs,
         active_page='qa'
     )
 
@@ -813,14 +825,63 @@ def documents_page():
 
 
 @app.route('/documents/view/<path:filename>', methods=['GET'])
-@permission_required('docs.inspect')
+@login_required
 def view_document_file(filename):
-    """Serve or view the original uploaded document file."""
+    """Serve or view an uploaded document file honoring visibility scope."""
     doc_path = Path(DOCUMENTS_DIR) / filename
     if not doc_path.exists() or not doc_path.is_file():
-        flash(f"Original file '{filename}' is not available on disk.", "warning")
-        return redirect(url_for('documents_page'))
+        abort(404)
+
+    # Check permission for internal documents
+    if not has_permission(current_user, 'docs.inspect'):
+        db_st = stats()
+        doc_info = next((d for d in (db_st.get("source_details") or []) if d.get("name") == filename), None)
+        if not doc_info or doc_info.get("visibility") != "public":
+            abort(403)
+
     return send_from_directory(str(Path(DOCUMENTS_DIR).resolve()), filename)
+
+
+@app.route('/profile', methods=['GET'])
+@login_required
+def profile_page():
+    """Unified user profile view tailored for Student, Officer, and Developer roles."""
+    scope = scope_for(current_user)
+    student_record = None
+    if scope.name == "student" and scope.bound_student_id():
+        try:
+            student_record = get_student_record(scope.bound_student_id(), Path(DOCUMENTS_DIR))
+        except Exception:
+            student_record = None
+
+    db_stats = stats()
+    total_users_count = 0
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM users")
+        total_users_count = cur.fetchone()[0]
+        conn.close()
+    except Exception:
+        pass
+
+    return render_template(
+        'profile.html',
+        student_record=student_record,
+        db_stats=db_stats,
+        total_users=total_users_count,
+        active_page='profile'
+    )
+
+
+@app.route('/settings', methods=['GET'])
+@login_required
+def settings_page():
+    """Application preferences and accessibility settings."""
+    return render_template(
+        'settings.html',
+        active_page='settings'
+    )
 
 
 @app.route('/system_info', methods=['GET'])
@@ -1198,6 +1259,21 @@ def stop_voice_typing():
     if success:
         return jsonify({"status": "success", "message": "Triggered Esc"})
     return jsonify({"status": "error", "message": err_msg or "Failed to trigger Esc"}), 500
+
+
+@app.errorhandler(403)
+def forbidden_error(e):
+    return render_template('errors/403.html'), 403
+
+
+@app.errorhandler(404)
+def not_found_error(e):
+    return render_template('errors/404.html'), 404
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    return render_template('errors/500.html'), 500
 
 
 if __name__ == '__main__':

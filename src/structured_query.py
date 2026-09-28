@@ -407,3 +407,53 @@ def execute_student_scoped_query(query: str, student_id: str, documents_dir: Pat
         f"3. Provide a helpful, clear, and reassuring response based strictly on their official record above."
     )
     return final_prompt, safe_sql, [row], citations
+
+
+def get_student_record(student_id: str, documents_dir: Path) -> dict | None:
+    """Fetch the single verified row for student_id from any indexed structured placement database."""
+    if not student_id:
+        return None
+    tmp_path, conn, table_schemas = build_universal_sqlite_db(documents_dir, None)
+    if not table_schemas:
+        if conn:
+            conn.close()
+        try:
+            os.remove(tmp_path)
+        except:
+            pass
+        return None
+
+    target_table = None
+    id_column = None
+    for t_name, info in table_schemas.items():
+        for col in info["samples"].keys():
+            if col.lower() in ["student_id", "usn", "roll_number", "roll_no", "id", "reg_no"]:
+                target_table = t_name
+                id_column = col
+                break
+        if target_table:
+            break
+
+    if not target_table or not id_column:
+        conn.close()
+        try:
+            os.remove(tmp_path)
+        except:
+            pass
+        return None
+
+    safe_sql = f"SELECT * FROM \"{target_table}\" WHERE LOWER(TRIM(\"{id_column}\")) = ? LIMIT 1;"
+    cur = conn.cursor()
+    cur.execute(safe_sql, (student_id.strip().lower(),))
+    row = cur.fetchone()
+    col_names = [description[0] for description in cur.description] if cur.description else []
+    conn.close()
+    try:
+        os.remove(tmp_path)
+    except:
+        pass
+
+    if not row:
+        return None
+    return dict(zip(col_names, row))
+

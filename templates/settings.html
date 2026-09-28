@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Settings & Preferences | Local DB QA System{% endblock %}
+{% block header_title %}System & Assistant Preferences{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+
+    <div class="glass-card" style="padding: 28px;">
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-volume-high" style="color: var(--accent-cyan);"></i> Assistant Speech & Voice Settings (TTS)
+        </h3>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 22px;">
+            Configure your client-side Web Speech voice synthesis preferences for reading answers aloud.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div>
+                <label style="display: block; font-size: 12.5px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">
+                    Select Voice
+                </label>
+                <select id="tts-voice-select" class="form-select" style="font-size: 13px;">
+                    <option value="">Default System Voice</option>
+                </select>
+            </div>
+            <div>
+                <label style="display: block; font-size: 12.5px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px;">
+                    Speech Speed Rate (<span id="rate-val">1.0x</span>)
+                </label>
+                <input type="range" id="tts-rate-slider" min="0.7" max="1.5" step="0.1" value="1.0" style="width: 100%; accent-color: var(--accent-cyan); cursor: pointer;" oninput="document.getElementById('rate-val').textContent = this.value + 'x'">
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-primary" onclick="testVoiceSynthesis()" style="font-size: 12.5px; padding: 8px 16px;">
+                <i class="fa-solid fa-play"></i> Test Voice Sample
+            </button>
+            <button type="button" class="btn" onclick="saveVoicePreferences()" style="background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 12.5px; padding: 8px 16px;">
+                <i class="fa-solid fa-floppy-disk"></i> Save Voice Preference
+            </button>
+        </div>
+    </div>
+
+    <!-- Interface & Layout Preferences -->
+    <div class="glass-card" style="padding: 28px;">
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-sliders" style="color: var(--accent-purple);"></i> Interface & Canvas Layout
+        </h3>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 22px;">
+            Customize the look and feel of your local Q&A Studio workspace.
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid var(--bg-card-border);">
+                <div>
+                    <div style="font-size: 13.5px; font-weight: 600; color: #fff;">Always Start with Side Panel Collapsed</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">Provides maximum canvas width by default when loading Q&A Studio.</div>
+                </div>
+                <input type="checkbox" id="pref-collapse-panel" style="accent-color: var(--accent-cyan); width: 18px; height: 18px; cursor: pointer;">
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid var(--bg-card-border);">
+                <div>
+                    <div style="font-size: 13.5px; font-weight: 600; color: #fff;">Auto-Scroll to Generated AI Answer</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">Smoothly scrolls the screen down to the answer card when an AI stream begins.</div>
+                </div>
+                <input type="checkbox" id="pref-auto-scroll" style="accent-color: var(--accent-cyan); width: 18px; height: 18px; cursor: pointer;" checked>
+            </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <button type="button" class="btn btn-primary" onclick="saveLayoutPreferences()" style="font-size: 12.5px; padding: 8px 16px;">
+                <i class="fa-solid fa-check"></i> Apply Layout Preferences
+            </button>
+        </div>
+    </div>
+
+    <!-- Privacy & Local Session Cache -->
+    <div class="glass-card" style="padding: 28px;">
+        <h3 style="font-family: 'Outfit', sans-serif; font-size: 20px; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-trash-can" style="color: var(--accent-rose);"></i> Local Storage & Browser Session Cache
+        </h3>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 18px;">
+            Clear local browser memory, student checklists, and stored parameters without affecting the server database.
+        </p>
+
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-danger" onclick="clearLocalStorageCache()" style="font-size: 12.5px; padding: 8px 16px;">
+                <i class="fa-solid fa-broom"></i> Clear Browser Cache & Checklist
+            </button>
+            <a href="{{ url_for('change_password') }}" class="btn" style="background: rgba(255,255,255,0.06); color: #fff; font-size: 12.5px; padding: 8px 16px;">
+                <i class="fa-solid fa-key"></i> Update Account Password
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Populate voice dropdown
+    function loadVoices() {
+        if (!('speechSynthesis' in window)) return;
+        const voiceSelect = document.getElementById('tts-voice-select');
+        const voices = window.speechSynthesis.getVoices();
+        const savedVoiceName = localStorage.getItem('tts_pref_voice') || '';
+
+        voiceSelect.innerHTML = '<option value="">Default System Voice</option>';
+        voices.forEach(voice => {
+            const opt = document.createElement('option');
+            opt.value = voice.name;
+            opt.textContent = `${voice.name} (${voice.lang})`;
+            if (voice.name === savedVoiceName) {
+                opt.selected = true;
+            }
+            voiceSelect.appendChild(opt);
+        });
+    }
+
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadVoices();
+        
+        // Load saved preferences
+        const savedRate = localStorage.getItem('tts_pref_rate');
+        if (savedRate) {
+            document.getElementById('tts-rate-slider').value = savedRate;
+            document.getElementById('rate-val').textContent = savedRate + 'x';
+        }
+
+        const prefCollapse = localStorage.getItem('qa_panel_collapsed');
+        if (prefCollapse === '1') {
+            document.getElementById('pref-collapse-panel').checked = true;
+        }
+
+        const prefScroll = localStorage.getItem('pref_auto_scroll');
+        if (prefScroll === '0') {
+            document.getElementById('pref-auto-scroll').checked = false;
+        }
+    });
+
+    function testVoiceSynthesis() {
+        if (!('speechSynthesis' in window)) {
+            alert('Your browser does not support voice synthesis.');
+            return;
+        }
+        window.speechSynthesis.cancel();
+        const voiceSelect = document.getElementById('tts-voice-select');
+        const rateSlider = document.getElementById('tts-rate-slider');
+        const text = "Hello! This is a test sample of the Local Database Question-Answering assistant.";
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = parseFloat(rateSlider.value) || 1.0;
+
+        const voices = window.speechSynthesis.getVoices();
+        if (voiceSelect.value) {
+            const match = voices.find(v => v.name === voiceSelect.value);
+            if (match) utterance.voice = match;
+        }
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function saveVoicePreferences() {
+        const voiceSelect = document.getElementById('tts-voice-select');
+        const rateSlider = document.getElementById('tts-rate-slider');
+        try {
+            localStorage.setItem('tts_pref_voice', voiceSelect.value);
+            localStorage.setItem('tts_pref_rate', rateSlider.value);
+            alert('Voice preferences saved successfully!');
+        } catch(e) {}
+    }
+
+    function saveLayoutPreferences() {
+        const prefCollapse = document.getElementById('pref-collapse-panel').checked;
+        const prefScroll = document.getElementById('pref-auto-scroll').checked;
+        try {
+            localStorage.setItem('qa_panel_collapsed', prefCollapse ? '1' : '0');
+            localStorage.setItem('pref_auto_scroll', prefScroll ? '1' : '0');
+            alert('Layout preferences updated!');
+        } catch(e) {}
+    }
+
+    function clearLocalStorageCache() {
+        if (confirm('Clear local browser preferences and student checklist?')) {
+            try {
+                localStorage.removeItem('student_readiness_checklist');
+                localStorage.removeItem('tts_pref_voice');
+                localStorage.removeItem('tts_pref_rate');
+                alert('Local cache reset successfully.');
+                location.reload();
+            } catch(e) {}
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}404 Not Found | Local DB QA System{% endblock %}
+{% block header_title %}Resource Not Found{% endblock %}
+
+{% block content %}
+<div style="max-width: 620px; margin: 40px auto; text-align: center;">
+    <div class="glass-card" style="padding: 44px 32px; border-top: 4px solid var(--accent-cyan);">
+        <div style="width: 72px; height: 72px; border-radius: 20px; background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); display: flex; align-items: center; justify-content: center; font-size: 32px; color: var(--accent-cyan); margin: 0 auto 20px; box-shadow: 0 0 25px rgba(6, 182, 212, 0.3);">
+            <i class="fa-solid fa-compass"></i>
+        </div>
+
+        <span class="status-badge" style="background: rgba(6, 182, 212, 0.2); color: var(--accent-cyan); font-size: 12px; padding: 4px 12px; margin-bottom: 14px;">
+            HTTP 404 • TARGET MISSING
+        </span>
+
+        <h2 style="font-family: 'Outfit', sans-serif; font-size: 24px; font-weight: 700; color: #fff; margin: 12px 0 8px;">
+            Document or Endpoint Not Found
+        </h2>
+
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
+            The requested URI or document namespace does not exist in the local database registry. 
+            The file may have been re-indexed, renamed, or unmounted.
+        </p>
+
+        <div style="display: flex; gap: 12px; justify-content: center;">
+            <a href="{{ url_for('index') }}" class="btn btn-primary" style="padding: 10px 20px;">
+                <i class="fa-solid fa-house"></i> Return to Q&A Studio
+            </a>
+            <button type="button" onclick="history.back()" class="btn" style="background: rgba(255, 255, 255, 0.08); color: #fff; padding: 10px 20px;">
+                <i class="fa-solid fa-arrow-left"></i> Previous Page
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
