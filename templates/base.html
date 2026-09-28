@@ -363,13 +363,49 @@
             <a href="{{ url_for('index') }}" class="nav-link {% if active_page == 'qa' %}active{% endif %}">
                 <i class="fa-solid fa-comments"></i> Q&A Studio
             </a>
+            {% if current_user.is_authenticated and current_user.is_placement %}
             <a href="{{ url_for('documents_page') }}" class="nav-link {% if active_page == 'documents' %}active{% endif %}">
                 <i class="fa-solid fa-folder-open"></i> Document Manager
+            </a>
+            <a href="{{ url_for('admin_users_page') }}" class="nav-link {% if active_page == 'users' %}active{% endif %}">
+                <i class="fa-solid fa-users-gear"></i> User Accounts
+            </a>
+            <a href="{{ url_for('audit_logs_page') }}" class="nav-link {% if active_page == 'audit' %}active{% endif %}">
+                <i class="fa-solid fa-clipboard-list"></i> Audit Logs
             </a>
             <a href="{{ url_for('system_info_page') }}" class="nav-link {% if active_page == 'system' %}active{% endif %}">
                 <i class="fa-solid fa-server"></i> System Status
             </a>
+            {% endif %}
         </nav>
+
+        {% if current_user.is_authenticated %}
+        <div style="margin-top: 14px; padding: 12px; background: rgba(255,255,255,0.04); border-radius: var(--radius-md); border: 1px solid var(--bg-card-border); font-size: 12px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-weight: 600; color: #fff; display: flex; align-items: center; gap: 6px;">
+                    <i class="fa-solid {% if current_user.is_placement %}fa-user-tie{% else %}fa-graduation-cap{% endif %}"></i> {{ current_user.username }}
+                </span>
+                <span class="status-badge" style="font-size: 10px; padding: 2px 6px; background: {% if current_user.is_placement %}rgba(6, 182, 212, 0.2); color: var(--accent-cyan);{% else %}rgba(139, 92, 246, 0.2); color: var(--accent-purple);{% endif %}">
+                    {{ current_user.role|capitalize }}
+                </span>
+            </div>
+            {% if current_user.student_id %}
+            <div style="font-size: 11px; color: var(--accent-cyan); font-family: monospace; margin-bottom: 8px;">
+                ID: {{ current_user.student_id }}
+            </div>
+            {% endif %}
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed rgba(255,255,255,0.08); padding-top: 8px; margin-top: 6px;">
+                <a href="{{ url_for('change_password') }}" style="color: var(--text-muted); font-size: 11px; text-decoration: none;"><i class="fa-solid fa-key"></i> Password</a>
+                <a href="{{ url_for('logout') }}" style="color: var(--accent-rose); font-size: 11px; text-decoration: none;"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+            </div>
+        </div>
+        {% else %}
+        <div style="margin-top: 14px;">
+            <a href="{{ url_for('login') }}" class="btn btn-primary" style="width: 100%; justify-content: center; font-size: 12.5px; padding: 8px;">
+                <i class="fa-solid fa-right-to-bracket"></i> Sign In
+            </a>
+        </div>
+        {% endif %}
 
         <!-- Sidebar Stats Card -->
         <div class="sidebar-stats">
@@ -402,6 +438,18 @@
                 <span class="status-badge online">
                     <i class="fa-solid fa-shield-halved"></i> 100% Offline & Private
                 </span>
+                {% if current_user.is_authenticated %}
+                <span class="status-badge" style="background: rgba(255,255,255,0.06); color: var(--text-main);">
+                    <i class="fa-solid {% if current_user.is_placement %}fa-user-tie{% else %}fa-user-graduate{% endif %}"></i> {{ current_user.username }} ({{ current_user.role|capitalize }})
+                </span>
+                <a href="{{ url_for('logout') }}" class="btn btn-danger" style="padding: 4px 10px; font-size: 12px;" title="Sign Out">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                </a>
+                {% else %}
+                <a href="{{ url_for('login') }}" class="btn btn-primary" style="padding: 6px 14px; font-size: 12px;">
+                    <i class="fa-solid fa-right-to-bracket"></i> Sign In
+                </a>
+                {% endif %}
             </div>
         </header>
 

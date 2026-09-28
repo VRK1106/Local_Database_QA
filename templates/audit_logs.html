@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Security Audit Logs | Local DB QA System{% endblock %}
+{% block header_title %}Security Audit Trail & Compliance{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+            <h3 style="font-size: 18px; font-weight: 600; color: #fff;">
+                <i class="fa-solid fa-clipboard-list" style="color: var(--accent-cyan);"></i> System Audit Logs (Last {{ logs|length }} Events)
+            </h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                Immutable trail tracking all queries, authentication attempts, document operations, and access decisions.
+            </p>
+        </div>
+        <a href="{{ url_for('audit_logs_page') }}" class="btn btn-primary" style="font-size: 13px; padding: 8px 14px;">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh Log
+        </a>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+            <thead>
+                <tr style="text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--bg-card-border);">
+                    <th style="padding: 10px;">ID</th>
+                    <th style="padding: 10px;">Timestamp</th>
+                    <th style="padding: 10px;">User</th>
+                    <th style="padding: 10px;">Role</th>
+                    <th style="padding: 10px;">Action</th>
+                    <th style="padding: 10px;">Endpoint</th>
+                    <th style="padding: 10px;">Query / Details</th>
+                    <th style="padding: 10px;">Status</th>
+                    <th style="padding: 10px;">IP Address</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.04);">
+                    <td style="padding: 10px; color: var(--text-muted);">#{{ log.id }}</td>
+                    <td style="padding: 10px; color: var(--text-muted); white-space: nowrap;">{{ log.timestamp }}</td>
+                    <td style="padding: 10px; font-weight: 600; color: #fff;">{{ log.username }}</td>
+                    <td style="padding: 10px;">
+                        <span class="status-badge" style="font-size: 10px; padding: 2px 6px; background: {% if log.role == 'placement' %}rgba(6, 182, 212, 0.2); color: var(--accent-cyan);{% elif log.role == 'student' %}rgba(139, 92, 246, 0.2); color: var(--accent-purple);{% else %}rgba(255, 255, 255, 0.1); color: var(--text-muted);{% endif %}">
+                            {{ log.role|capitalize }}
+                        </span>
+                    </td>
+                    <td style="padding: 10px; font-weight: 500; color: #fff;">{{ log.action }}</td>
+                    <td style="padding: 10px; color: var(--text-muted); font-family: monospace;">{{ log.endpoint }}</td>
+                    <td style="padding: 10px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ log.query_text }}">
+                        {{ log.query_text or '—' }}
+                    </td>
+                    <td style="padding: 10px;">
+                        {% if log.status == 'success' %}
+                            <span style="color: var(--accent-emerald); font-weight: 600;"><i class="fa-solid fa-circle-check"></i> OK</span>
+                        {% elif log.status == 'forbidden' or log.status == 'unauthorized' %}
+                            <span style="color: var(--accent-rose); font-weight: 600;"><i class="fa-solid fa-ban"></i> Denied</span>
+                        {% else %}
+                            <span style="color: #fbbf24; font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> {{ log.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 10px; color: var(--text-muted); font-size: 11px;">{{ log.ip_address }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

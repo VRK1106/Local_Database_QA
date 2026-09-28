@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Login | Local DB QA System{% endblock %}
+{% block header_title %}Secure Access Portal{% endblock %}
+
+{% block content %}
+<div style="max-width: 480px; margin: 40px auto;">
+    <div class="glass-card" style="padding: 32px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <div style="width: 54px; height: 54px; border-radius: 14px; background: var(--gradient-primary); margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; box-shadow: var(--shadow-glow);">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <h2 style="font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 700; color: #fff;">Role-Based Authentication</h2>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: 6px;">Sign in to access your placement QA workspace</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <div style="margin-bottom: 18px;">
+                <label style="display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px;">
+                    <i class="fa-solid fa-user"></i> Username / Roll Number / USN
+                </label>
+                <input type="text" name="username" class="form-control" placeholder="e.g. admin or 1MS21CS001" required autofocus autocomplete="username">
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label style="display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px;">
+                    <i class="fa-solid fa-lock"></i> Password
+                </label>
+                <input type="password" name="password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 15px;">
+                <i class="fa-solid fa-right-to-bracket"></i> Sign In to System
+            </button>
+        </form>
+
+        <div style="margin-top: 24px; padding-top: 18px; border-top: 1px dashed var(--bg-card-border); font-size: 12px; color: var(--text-muted);">
+            <div style="font-weight: 600; color: #fff; margin-bottom: 6px;"><i class="fa-solid fa-circle-question"></i> System Roles & Privileges:</div>
+            <ul style="padding-left: 18px; line-height: 1.6;">
+                <li><strong style="color: var(--accent-cyan);">Placement Officer:</strong> Full admin capabilities, document ingestion, visibility toggles, all-student SQL analytics.</li>
+                <li><strong style="color: var(--accent-purple);">Student:</strong> Scoped access to public notices and their personal placement records with strict row-level isolation.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

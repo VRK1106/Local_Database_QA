@@ -334,6 +334,17 @@ def execute_student_scoped_query(query: str, student_id: str, documents_dir: Pat
     if not student_id:
         return None, None, None, []
 
+    # Only invoke row-level personal DB query if the query asks about self/record
+    personal_keywords = [
+        "my", "mine", "me", "i", "cgpa", "gpa", "marks", "grade", "score",
+        "backlog", "placed", "placement", "offer", "package", "salary",
+        "eligib", "status", "profile", "record", "details", "resume"
+    ]
+    query_lower = query.lower()
+    is_personal_intent = any(k in query_lower.split() or k in query_lower for k in personal_keywords) or (student_id.lower() in query_lower)
+    if not is_personal_intent:
+        return None, None, None, []
+
     tmp_path, conn, table_schemas = build_universal_sqlite_db(documents_dir, None)
     if not table_schemas:
         if conn:

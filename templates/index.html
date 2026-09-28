@@ -518,16 +518,18 @@
             <div class="form-group">
                 <label class="form-label">Filter by Document Source</label>
                 <div class="doc-filter-list">
-                    {% if db_stats.source_names %}
-                        {% for src in db_stats.source_names %}
-                            <label class="doc-filter-item">
-                                <input type="checkbox" name="sources" value="{{ src }}" class="doc-source-checkbox" {% if src in selected_sources %}checked{% endif %}>
-                                <span class="text-truncate">{{ src }}</span>
-                            </label>
+                    {% if db_stats.source_details %}
+                        {% for doc in db_stats.source_details %}
+                            {% if current_user.is_placement or doc.visibility == 'public' %}
+                                <label class="doc-filter-item">
+                                    <input type="checkbox" name="sources" value="{{ doc.name }}" class="doc-source-checkbox" {% if doc.name in selected_sources %}checked{% endif %}>
+                                    <span class="text-truncate">{{ doc.name }}</span>
+                                </label>
+                            {% endif %}
                         {% endfor %}
                     {% else %}
                         <div style="font-size: 12px; color: var(--text-muted); padding: 8px;">
-                            No documents indexed yet. Upload files in Document Manager.
+                            No documents indexed yet.
                         </div>
                     {% endif %}
                 </div>

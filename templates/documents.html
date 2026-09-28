@@ -114,6 +114,15 @@
             </h3>
 
             <form action="{{ url_for('api_upload') }}" method="POST" enctype="multipart/form-data" id="upload-form">
+                <div style="margin-bottom: 14px;">
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+                        <i class="fa-solid fa-eye"></i> Document Visibility & Student Access
+                    </label>
+                    <select name="visibility" id="upload-visibility" class="form-select" style="font-size: 13px; padding: 8px 12px;">
+                        <option value="internal" selected>🔒 Internal (Placement Department Only)</option>
+                        <option value="public">🌐 Public (Accessible by Students & Notices)</option>
+                    </select>
+                </div>
                 <div class="upload-dropzone" onclick="document.getElementById('file-input').click()">
                     <div class="upload-icon"><i class="fa-solid fa-database"></i></div>
                     <div style="font-weight: 600; margin-bottom: 4px;">Click or Drag & Drop Database & Text Files</div>
@@ -124,15 +133,18 @@
         </div>
 
         <div class="glass-card">
-            <h3 style="font-family: 'Outfit', sans-serif; font-size: 16px; margin-bottom: 16px; color: var(--accent-rose);">
-                <i class="fa-solid fa-triangle-exclamation"></i> Vector Store Reset
+            <h3 style="font-family: 'Outfit', sans-serif; font-size: 16px; margin-bottom: 14px; color: var(--accent-rose);">
+                <i class="fa-solid fa-triangle-exclamation"></i> Protected Vector Store Reset
             </h3>
-            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-                Wipe all indexed chunks and documents permanently from local storage.
+            <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">
+                Wipe all indexed chunks and documents permanently. Requires your officer password confirmation.
             </p>
-            <form action="{{ url_for('api_reset_db') }}" method="POST" onsubmit="return confirm('Are you sure you want to wipe the entire vector database?')">
+            <form action="{{ url_for('api_reset_db') }}" method="POST" onsubmit="return confirm('Wipe the entire local database? This cannot be undone.')">
+                <div style="margin-bottom: 12px;">
+                    <input type="password" name="admin_password" class="form-control" placeholder="Re-enter officer password" required style="font-size: 13px; padding: 8px 12px;">
+                </div>
                 <button type="submit" class="btn btn-danger" style="width: 100%;">
-                    <i class="fa-solid fa-trash-can"></i> Reset Local Vector DB
+                    <i class="fa-solid fa-trash-can"></i> Confirm & Reset Vector DB
                 </button>
             </form>
         </div>
@@ -155,6 +167,7 @@
                             <th>Document / DB Name</th>
                             <th>Total Chunks</th>
                             <th>Pages / Tables</th>
+                            <th>Visibility Scope</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -173,6 +186,22 @@
                                 </td>
                                 <td>{{ doc.chunks }} chunks</td>
                                 <td>{{ doc.pages }} pages</td>
+                                <td>
+                                    <form action="{{ url_for('api_update_doc_visibility') }}" method="POST" style="display: inline-flex; align-items: center; gap: 6px;">
+                                        <input type="hidden" name="source_name" value="{{ doc.name }}">
+                                        {% if doc.visibility == 'public' %}
+                                            <input type="hidden" name="new_visibility" value="internal">
+                                            <button type="submit" class="action-btn" style="background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald);" title="Click to make Internal">
+                                                <i class="fa-solid fa-globe"></i> Public
+                                            </button>
+                                        {% else %}
+                                            <input type="hidden" name="new_visibility" value="public">
+                                            <button type="submit" class="action-btn" style="background: rgba(244, 63, 94, 0.2); color: #f87171;" title="Click to make Public">
+                                                <i class="fa-solid fa-lock"></i> Internal
+                                            </button>
+                                        {% endif %}
+                                    </form>
+                                </td>
                                 <td>
                                     <div style="display: flex; gap: 8px;">
                                         <a href="{{ url_for('documents_page', inspect=doc.name) }}" class="action-btn" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);">
