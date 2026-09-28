@@ -205,12 +205,15 @@
                                 </td>
                                 <td>
                                     <div style="display: flex; gap: 8px;">
-                                        <a href="{{ url_for('documents_page', inspect=doc.name) }}" class="action-btn" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);">
-                                            <i class="fa-solid fa-eye"></i> Inspect
+                                        <a href="{{ url_for('view_document_file', filename=doc.name) }}" target="_blank" class="action-btn" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald);" title="Open / View original uploaded file">
+                                            <i class="fa-solid fa-file-arrow-up"></i> View
+                                        </a>
+                                        <a href="{{ url_for('documents_page', inspect=doc.name) }}" class="action-btn" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan);" title="Inspect vector chunks">
+                                            <i class="fa-solid fa-eye"></i> Chunks
                                         </a>
                                         <form action="{{ url_for('api_delete_doc') }}" method="POST" style="display: inline;" onsubmit="return confirm('Delete {{ doc.name }}?')">
                                             <input type="hidden" name="source_name" value="{{ doc.name }}">
-                                            <button type="submit" class="action-btn" style="background: rgba(244, 63, 94, 0.15); color: #f87171;">
+                                            <button type="submit" class="action-btn" style="background: rgba(244, 63, 94, 0.15); color: #f87171;" title="Delete Document">
                                                 <i class="fa-solid fa-trash"></i>
                                             </button>
                                         </form>
@@ -235,7 +238,12 @@
                     <h4 style="font-family: 'Outfit', sans-serif; font-size: 16px; color: var(--accent-cyan);">
                         <i class="fa-solid fa-magnifying-glass"></i> Inspecting Chunks: {{ selected_doc }} ({{ inspect_chunks|length }} Chunks)
                     </h4>
-                    <a href="{{ url_for('documents_page') }}" style="color: var(--text-muted); text-decoration: none;"><i class="fa-solid fa-xmark"></i> Close</a>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <a href="{{ url_for('view_document_file', filename=selected_doc) }}" target="_blank" class="action-btn" style="background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); font-size: 12px; padding: 4px 10px; text-decoration: none;">
+                            <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Raw File
+                        </a>
+                        <a href="{{ url_for('documents_page') }}" style="color: var(--text-muted); text-decoration: none;"><i class="fa-solid fa-xmark"></i> Close</a>
+                    </div>
                 </div>
 
                 <div class="chunk-list">

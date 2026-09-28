@@ -7,19 +7,82 @@
 <style>
     .qa-container {
         display: flex;
-        gap: 16px;
+        gap: 24px;
         width: 100%;
         align-items: flex-start;
+        transition: all 0.3s ease;
     }
 
     .left-col {
         flex: 1;
         min-width: 0;
+        transition: all 0.3s ease;
+    }
+
+    .right-col {
+        width: 350px;
+        flex-shrink: 0;
+        transition: all 0.3s ease;
+    }
+
+    .qa-container.panel-collapsed .right-col {
+        display: none !important;
+    }
+
+    .panel-toggle-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bg-card-border);
+        color: var(--text-muted);
+        cursor: pointer;
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-sm);
+        transition: all 0.2s ease;
+        font-size: 11px;
+    }
+
+    .panel-toggle-btn:hover {
+        color: var(--accent-cyan);
+        border-color: rgba(6, 182, 212, 0.4);
+        background: rgba(6, 182, 212, 0.1);
+        transform: scale(1.05);
+    }
+
+    .reopen-panel-btn {
+        display: none;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--bg-card-border);
+        color: var(--text-muted);
+        padding: 7px 14px;
+        border-radius: var(--radius-md);
+        font-size: 12.5px;
+        cursor: pointer;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s ease;
+        margin-bottom: 16px;
+    }
+
+    .qa-container.panel-collapsed .reopen-panel-btn {
+        display: inline-flex;
+    }
+
+    .reopen-panel-btn:hover {
+        color: var(--accent-cyan);
+        border-color: rgba(6, 182, 212, 0.4);
+        background: rgba(6, 182, 212, 0.1);
     }
 
     @media (max-width: 1150px) {
         .qa-container {
             flex-direction: column;
+            gap: 20px;
+        }
+        .right-col {
+            width: 100%;
         }
     }
 
@@ -27,9 +90,10 @@
         background: var(--bg-card);
         border: 1px solid var(--bg-card-border);
         border-radius: var(--radius-lg);
-        padding: 16px 20px;
+        padding: 24px 26px;
         backdrop-filter: blur(16px);
-        margin-bottom: 16px;
+        margin-bottom: 22px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     }
 
     .mode-selector {
@@ -271,13 +335,13 @@
 
     /* Options Panel (Right Column) */
     .options-panel {
-        width: 240px;
-        flex-shrink: 0;
+        width: 100%;
         background: var(--bg-card);
         border: 1px solid var(--bg-card-border);
         border-radius: var(--radius-lg);
-        padding: 16px;
+        padding: 22px;
         height: fit-content;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     }
 
     .panel-title {
@@ -374,24 +438,48 @@
 {% endblock %}
 
 {% block content %}
-<div class="qa-container">
+<div class="qa-container" id="qa-container">
     <!-- Left Column: Query Input & Answer Output -->
     <div class="left-col">
+        {% if not current_user.is_student %}
+        <button type="button" id="reopen-panel-btn" class="reopen-panel-btn" onclick="toggleParametersPanel()">
+            <i class="fa-solid fa-sliders"></i> Show Preferences & Parameters
+        </button>
+        {% endif %}
         
         <!-- Query Box -->
         <form id="qa-form" class="query-box" onsubmit="handleQuerySubmit(event)">
             <input type="hidden" name="mode" id="selected-mode" value="{{ mode }}">
 
             <div class="mode-selector">
-                <button type="button" class="mode-btn {% if mode == 'rag' %}active{% endif %}" onclick="setMode('rag', event)">
-                    <i class="fa-solid fa-brain"></i> RAG (Vector DB + Ollama)
+                {% if current_user.is_developer %}
+                <button type="button" class="mode-btn {% if mode == 'rag' or not mode %}active{% endif %}" onclick="setMode('rag', event)">
+                    <i class="fa-solid fa-microchip"></i> RAG Pipeline (ChromaDB + LLM)
                 </button>
                 <button type="button" class="mode-btn {% if mode == 'direct' %}active{% endif %}" onclick="setMode('direct', event)">
-                    <i class="fa-solid fa-robot"></i> Direct Ollama Chat
+                    <i class="fa-solid fa-terminal"></i> Direct LLM Inference
                 </button>
                 <button type="button" class="mode-btn {% if mode == 'search_only' %}active{% endif %}" onclick="setMode('search_only', event)">
-                    <i class="fa-solid fa-magnifying-glass"></i> Vector Search Only
+                    <i class="fa-solid fa-vector-square"></i> Vector k-NN Retrieval Only
                 </button>
+                {% elif current_user.is_placement %}
+                <button type="button" class="mode-btn {% if mode == 'rag' or not mode %}active{% endif %}" onclick="setMode('rag', event)">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Document Search & AI Answer
+                </button>
+                <button type="button" class="mode-btn {% if mode == 'direct' %}active{% endif %}" onclick="setMode('direct', event)">
+                    <i class="fa-solid fa-comments"></i> General AI Assistant
+                </button>
+                <button type="button" class="mode-btn {% if mode == 'search_only' %}active{% endif %}" onclick="setMode('search_only', event)">
+                    <i class="fa-solid fa-file-magnifying-glass"></i> Search Excerpts Only
+                </button>
+                {% else %}
+                <button type="button" class="mode-btn {% if mode == 'rag' or not mode %}active{% endif %}" onclick="setMode('rag', event)">
+                    <i class="fa-solid fa-graduation-cap"></i> Student AI Assistant
+                </button>
+                <button type="button" class="mode-btn {% if mode == 'direct' %}active{% endif %}" onclick="setMode('direct', event)">
+                    <i class="fa-solid fa-comment-dots"></i> General Discussion
+                </button>
+                {% endif %}
             </div>
 
             <!-- Voice Activity Banner & Volume Level Bar -->
@@ -475,12 +563,101 @@
         </div>
     </div>
 
-    {% if not current_user.is_student %}
-    <!-- Right Column: Settings & Filters (Placement Officers & Developers) -->
-    <div class="right-col">
+    {% if current_user.is_developer %}
+    <!-- Right Column: Technical Core Engine Parameters (Developer View) -->
+    <div class="right-col" id="qa-right-col">
         <div class="options-panel">
-            <div class="panel-title" style="display: flex; align-items: center; gap: 8px;">
-                <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Search & Assistant Preferences
+            <div class="panel-title" style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--accent-rose); font-family: 'Outfit', sans-serif;">
+                    <i class="fa-solid fa-microchip"></i> Engine Pipeline & QA Parameters
+                </span>
+                <button type="button" class="panel-toggle-btn" onclick="toggleParametersPanel()" title="Collapse Panel">
+                    <i class="fa-solid fa-angles-right"></i>
+                </button>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="font-size: 11.5px; font-weight: 600; color: #cbd5e1; display: flex; justify-content: space-between;">
+                    <span><i class="fa-solid fa-brain" style="color: var(--accent-rose);"></i> LLM Inference Checkpoint</span>
+                    <span style="font-family: monospace; font-size: 10px; color: var(--accent-rose);">Ollama Engine</span>
+                </label>
+                <select name="model" id="model-select" class="form-select" style="font-size: 12.5px; font-family: monospace;">
+                    {% for m in available_models %}
+                        <option value="{{ m }}" {% if m == selected_model %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="font-size: 11.5px; font-weight: 600; color: #cbd5e1; display: flex; justify-content: space-between;">
+                    <span><i class="fa-solid fa-layer-group" style="color: var(--accent-cyan);"></i> Vector Retriever Top-K</span>
+                    <span style="font-family: monospace; font-size: 10px; color: var(--accent-cyan);">Similarity k</span>
+                </label>
+                <select name="top_k" id="top-k-select" class="form-select" style="font-size: 12.5px; font-family: monospace;">
+                    <option value="2" {% if top_k == 2 %}selected{% endif %}>k=2 (Sparse Vector Window)</option>
+                    <option value="4" {% if top_k == 4 or not top_k %}selected{% endif %}>k=4 (Dense Vector Balanced - Default)</option>
+                    <option value="6" {% if top_k == 6 %}selected{% endif %}>k=6 (High-Recall Multi-Chunk)</option>
+                    <option value="8" {% if top_k == 8 %}selected{% endif %}>k=8 (Deep Context Aggregation)</option>
+                    <option value="12" {% if top_k == 12 %}selected{% endif %}>k=12 (Exhaustive Semantic Search)</option>
+                </select>
+                <div style="font-size: 10.5px; color: var(--text-muted); margin-top: 4px;">Cosine nearest-neighbors pulled from ChromaDB collection.</div>
+            </div>
+
+            <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--bg-card-border);">
+                <label class="form-label" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 2px;">
+                    <span style="font-size: 12px; font-weight: 600; color: #e2e8f0;">
+                        <i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i> NLI Cross-Encoder Guard
+                    </span>
+                    <input type="checkbox" id="trust-checkbox" style="accent-color: var(--accent-cyan); width: 16px; height: 16px; cursor: pointer;" checked>
+                </label>
+                <div style="font-size: 10.5px; color: var(--text-muted);">DeBERTa/NLI entailment classifier verifying premise-to-hypothesis consistency (&tau; &ge; 0.5).</div>
+            </div>
+
+            <div class="form-group" style="background: rgba(255,255,255,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--bg-card-border);">
+                <label class="form-label" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 2px;">
+                    <span style="font-size: 12px; font-weight: 600; color: #e2e8f0;">
+                        <i class="fa-solid fa-volume-high" style="color: var(--accent-cyan);"></i> Speech Dispatcher (TTS)
+                    </span>
+                    <input type="checkbox" id="tts-checkbox" style="accent-color: var(--accent-cyan); width: 16px; height: 16px; cursor: pointer;">
+                </label>
+                <div style="font-size: 10.5px; color: var(--text-muted);">Dispatches streaming chunks to client Web Speech API synth buffer.</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" style="font-size: 11.5px; font-weight: 600; color: #cbd5e1;">
+                    <i class="fa-solid fa-database" style="color: var(--accent-amber);"></i> ChromaDB Namespaces (All Access)
+                </label>
+                <div class="doc-filter-list" style="max-height: 180px; overflow-y: auto;">
+                    {% if db_stats.source_details %}
+                        {% for doc in db_stats.source_details %}
+                            <label class="doc-filter-item">
+                                <input type="checkbox" name="sources" value="{{ doc.name }}" class="doc-source-checkbox" {% if doc.name in selected_sources %}checked{% endif %}>
+                                <span class="text-truncate">{{ doc.name }}</span>
+                                <span style="font-size: 10px; font-family: monospace; padding: 1px 5px; border-radius: 4px; margin-left: auto; {% if doc.visibility == 'public' %}background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald);{% else %}background: rgba(244, 63, 94, 0.2); color: var(--accent-rose);{% endif %}">
+                                    {{ doc.visibility|upper }}
+                                </span>
+                            </label>
+                        {% endfor %}
+                    {% else %}
+                        <div style="font-size: 12px; color: var(--text-muted); padding: 8px;">
+                            No collections indexed yet.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% elif current_user.is_placement %}
+    <!-- Right Column: Settings & Filters (Placement Officers - Non-Technical) -->
+    <div class="right-col" id="qa-right-col">
+        <div class="options-panel">
+            <div class="panel-title" style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 8px; font-family: 'Outfit', sans-serif;">
+                    <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Search & Assistant Preferences
+                </span>
+                <button type="button" class="panel-toggle-btn" onclick="toggleParametersPanel()" title="Collapse Panel">
+                    <i class="fa-solid fa-angles-right"></i>
+                </button>
             </div>
 
             <div class="form-group">
@@ -556,6 +733,16 @@
 
 {% block extra_scripts %}
 <script>
+    function toggleParametersPanel() {
+        const container = document.getElementById('qa-container');
+        if (container) {
+            container.classList.toggle('panel-collapsed');
+            try {
+                localStorage.setItem('qa_panel_collapsed', container.classList.contains('panel-collapsed') ? '1' : '0');
+            } catch(e) {}
+        }
+    }
+
     // Initialize marked.js configuration
     if (typeof marked !== 'undefined') {
         marked.setOptions({
@@ -572,6 +759,15 @@
 
     // Render initial answer markdown if present
     document.addEventListener("DOMContentLoaded", function() {
+        const container = document.getElementById('qa-container');
+        if (container) {
+            try {
+                if (localStorage.getItem('qa_panel_collapsed') === '1') {
+                    container.classList.add('panel-collapsed');
+                }
+            } catch(e) {}
+        }
+
         const rawContent = document.getElementById('raw-answer-content');
         const answerTextDiv = document.getElementById('answer-text');
         if (rawContent && rawContent.textContent.trim()) {

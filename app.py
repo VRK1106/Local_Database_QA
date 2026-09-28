@@ -28,7 +28,8 @@ from flask import (
     url_for,
     flash,
     session,
-    abort
+    abort,
+    send_from_directory
 )
 from flask_login import (
     LoginManager,
@@ -809,6 +810,17 @@ def documents_page():
         inspect_chunks=inspect_chunks,
         active_page='documents'
     )
+
+
+@app.route('/documents/view/<path:filename>', methods=['GET'])
+@permission_required('docs.inspect')
+def view_document_file(filename):
+    """Serve or view the original uploaded document file."""
+    doc_path = Path(DOCUMENTS_DIR) / filename
+    if not doc_path.exists() or not doc_path.is_file():
+        flash(f"Original file '{filename}' is not available on disk.", "warning")
+        return redirect(url_for('documents_page'))
+    return send_from_directory(str(Path(DOCUMENTS_DIR).resolve()), filename)
 
 
 @app.route('/system_info', methods=['GET'])

@@ -60,7 +60,10 @@
             </div>
             <span class="status-badge" style="background: rgba(139, 92, 246, 0.2); color: var(--accent-purple);">Audit OK</span>
         </div>
-        <div style="display: flex; gap: 8px; margin-top: 16px;">
+        <div style="display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
+            <a href="{{ url_for('documents_page') }}" class="btn" style="background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); font-size: 12px; padding: 6px 12px;">
+                <i class="fa-solid fa-folder-open"></i> All Documents
+            </a>
             <a href="{{ url_for('dev_users_page') }}" class="btn" style="background: rgba(255,255,255,0.06); color: #fff; font-size: 12px; padding: 6px 12px;">
                 <i class="fa-solid fa-users"></i> Users ({{ total_users }})
             </a>
@@ -129,8 +132,14 @@
         <i class="fa-solid fa-compass" style="color: var(--accent-cyan);"></i> Developer Operations Portal Directory
     </h3>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+        <a href="{{ url_for('documents_page') }}" class="btn" style="background: rgba(6, 182, 212, 0.08); color: var(--text-main); justify-content: flex-start; padding: 12px; border: 1px solid rgba(6, 182, 212, 0.2);">
+            <i class="fa-solid fa-database" style="color: var(--accent-cyan);"></i> All Documents & Namespaces
+        </a>
         <a href="{{ url_for('dev_users_page') }}" class="btn" style="background: rgba(255,255,255,0.04); color: var(--text-main); justify-content: flex-start; padding: 12px;">
             <i class="fa-solid fa-users-gear" style="color: var(--accent-purple);"></i> User & Role Authority
+        </a>
+        <a href="{{ url_for('system_info_page') }}" class="btn" style="background: rgba(255,255,255,0.04); color: var(--text-main); justify-content: flex-start; padding: 12px;">
+            <i class="fa-solid fa-server" style="color: var(--accent-purple);"></i> System & Model Diagnostics
         </a>
         <a href="{{ url_for('dev_config_page') }}" class="btn" style="background: rgba(255,255,255,0.04); color: var(--text-main); justify-content: flex-start; padding: 12px;">
             <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Runtime Engine Config

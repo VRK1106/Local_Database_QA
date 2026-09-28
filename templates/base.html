@@ -64,6 +64,7 @@
             bottom: 0;
             left: 0;
             z-index: 100;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .brand-logo {
@@ -204,17 +205,49 @@
             min-height: 100vh;
             max-width: calc(100vw - 240px);
             overflow-x: hidden;
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body.sidebar-collapsed .sidebar {
+            transform: translateX(-100%);
+        }
+
+        body.sidebar-collapsed .main-wrapper {
+            margin-left: 0 !important;
+            max-width: 100vw !important;
+        }
+
+        .hamburger-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--bg-card-border);
+            color: var(--text-main);
+            width: 38px;
+            height: 38px;
+            border-radius: var(--radius-md);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .hamburger-btn:hover {
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent-cyan);
+            border-color: rgba(6, 182, 212, 0.3);
+            transform: scale(1.05);
         }
 
         .topbar {
-            height: 56px;
+            height: 60px;
             border-bottom: 1px solid var(--bg-card-border);
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(12px);
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(14px);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 20px;
+            padding: 0 24px;
             position: sticky;
             top: 0;
             z-index: 90;
@@ -222,7 +255,7 @@
 
         .topbar-title {
             font-family: 'Outfit', sans-serif;
-            font-size: 17px;
+            font-size: 17.5px;
             font-weight: 600;
         }
 
@@ -233,23 +266,40 @@
         }
 
         .content-area {
-            padding: 16px 20px;
+            padding: 24px 32px;
             flex: 1;
             max-width: 100%;
             overflow-x: hidden;
         }
 
-        @media (max-width: 1280px) {
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(4px);
+            z-index: 95;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        @media (max-width: 900px) {
             .sidebar {
-                width: 210px;
-                padding: 16px 10px;
+                transform: translateX(-100%);
+            }
+            body.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+            body.sidebar-open .sidebar-backdrop {
+                display: block;
+                opacity: 1;
             }
             .main-wrapper {
-                margin-left: 210px;
-                max-width: calc(100vw - 210px);
+                margin-left: 0 !important;
+                max-width: 100vw !important;
             }
             .content-area {
-                padding: 14px 16px;
+                padding: 18px 16px;
             }
         }
 
@@ -385,17 +435,20 @@
             <a href="{{ url_for('audit_logs_page') }}" class="nav-link {% if active_page == 'audit' %}active{% endif %}">
                 <i class="fa-solid fa-clipboard-list"></i> Audit Logs
             </a>
-            <a href="{{ url_for('system_info_page') }}" class="nav-link {% if active_page == 'system' %}active{% endif %}">
-                <i class="fa-solid fa-server"></i> System Status
-            </a>
             {% endif %}
 
             {% if current_user.is_authenticated and current_user.is_developer %}
-            <div style="margin: 10px 0 4px; padding-left: 8px; font-size: 10.5px; text-transform: uppercase; color: var(--accent-rose); font-weight: 700; letter-spacing: 0.5px;">
+            <div style="margin: 12px 0 6px; padding-left: 8px; font-size: 11px; text-transform: uppercase; color: var(--accent-rose); font-weight: 700; letter-spacing: 0.5px;">
                 <i class="fa-solid fa-terminal"></i> Developer Hub
             </div>
             <a href="{{ url_for('dev_dashboard') }}" class="nav-link {% if active_page == 'dev_dashboard' %}active{% endif %}" style="border: 1px dashed rgba(244, 63, 94, 0.4);">
                 <i class="fa-solid fa-code" style="color: var(--accent-rose);"></i> Control Center
+            </a>
+            <a href="{{ url_for('documents_page') }}" class="nav-link {% if active_page == 'documents' %}active{% endif %}">
+                <i class="fa-solid fa-database" style="color: var(--accent-cyan);"></i> All Documents Explorer
+            </a>
+            <a href="{{ url_for('system_info_page') }}" class="nav-link {% if active_page == 'system' %}active{% endif %}">
+                <i class="fa-solid fa-server" style="color: var(--accent-purple);"></i> System Diagnostics
             </a>
             <a href="{{ url_for('dev_danger_page') }}" class="nav-link {% if active_page == 'dev_danger' %}active{% endif %}" style="color: #fca5a5;">
                 <i class="fa-solid fa-radiation" style="color: var(--accent-rose);"></i> Danger Zone
@@ -453,12 +506,18 @@
         </div>
         {% endif %}
     </aside>
+    <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
     <!-- Main Wrapper -->
     <div class="main-wrapper">
         <header class="topbar">
-            <div class="topbar-title">
-                {% block header_title %}Local Database Question-Answering System{% endblock %}
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <button type="button" id="sidebar-toggle-btn" class="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle Navigation Sidebar" title="Toggle Navigation Sidebar">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+                <div class="topbar-title">
+                    {% block header_title %}Local Database Question-Answering System{% endblock %}
+                </div>
             </div>
             <div class="topbar-right">
                 <span class="status-badge online">
@@ -499,6 +558,26 @@
         </footer>
     </div>
 
+    <script>
+        function toggleSidebar() {
+            if (window.innerWidth <= 900) {
+                document.body.classList.toggle('sidebar-open');
+            } else {
+                document.body.classList.toggle('sidebar-collapsed');
+                try {
+                    localStorage.setItem('sidebar_collapsed', document.body.classList.contains('sidebar-collapsed') ? '1' : '0');
+                } catch(e) {}
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                if (window.innerWidth > 900 && localStorage.getItem('sidebar_collapsed') === '1') {
+                    document.body.classList.add('sidebar-collapsed');
+                }
+            } catch(e) {}
+        });
+    </script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>
