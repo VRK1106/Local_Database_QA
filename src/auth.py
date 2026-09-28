@@ -21,6 +21,8 @@ PERMISSIONS = {
         "query.public",
         "query.own_record",
         "account.change_password",
+        "tickets.create",
+        "tickets.view_own",
     },
     "placement": {
         "query.public",
@@ -34,6 +36,9 @@ PERMISSIONS = {
         "users.reset_student_password",
         "users.disable_student",
         "audit.view_own_portal",
+        "tickets.create",
+        "tickets.view_own",
+        "tickets.manage_placement",
     },
 }
 
@@ -48,6 +53,8 @@ PERMISSIONS["developer"] = PERMISSIONS["placement"] | {
     "db.reset",
     "impersonate.student",
     "impersonate.placement",
+    "tickets.manage_developer",
+    "tickets.view_all",
 }
 
 
@@ -154,6 +161,42 @@ def init_auth_db():
             status TEXT DEFAULT 'success',
             ip_address TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_number TEXT UNIQUE NOT NULL,
+            creator_id INTEGER NOT NULL,
+            creator_username TEXT NOT NULL,
+            creator_role TEXT NOT NULL,
+            target_role TEXT NOT NULL,
+            category TEXT NOT NULL,
+            priority TEXT DEFAULT 'medium',
+            status TEXT DEFAULT 'open',
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            student_id TEXT,
+            assigned_to_id INTEGER,
+            assigned_to_username TEXT,
+            resolution_notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ticket_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_id INTEGER NOT NULL,
+            sender_id INTEGER NOT NULL,
+            sender_username TEXT NOT NULL,
+            sender_role TEXT NOT NULL,
+            message TEXT NOT NULL,
+            is_internal_note INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
         );
     """)
     conn.commit()

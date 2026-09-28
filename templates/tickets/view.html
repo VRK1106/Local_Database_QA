@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ticket.ticket_number }}: {{ ticket.title }} - Issue Resolver{% endblock %}
+{% block header_title %}Ticket {{ ticket.ticket_number }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .ticket-view-container {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 26px;
+        width: 100%;
+        align-items: start;
+    }
+
+    @media (max-width: 1100px) {
+        .ticket-view-container {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .ticket-main {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-width: 0;
+    }
+
+    .ticket-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .ticket-card {
+        background: var(--bg-card);
+        border: 1px solid var(--bg-card-border);
+        border-radius: 16px;
+        padding: 24px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .badge-status {
+        font-size: 11.5px;
+        padding: 4px 12px;
+        border-radius: 16px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .status-open {
+        background: rgba(245, 158, 11, 0.18);
+        color: var(--accent-amber);
+        border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .status-in_progress {
+        background: rgba(139, 92, 246, 0.18);
+        color: var(--accent-purple);
+        border: 1px solid rgba(139, 92, 246, 0.35);
+    }
+
+    .status-resolved {
+        background: rgba(16, 185, 129, 0.18);
+        color: var(--accent-emerald);
+        border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+
+    .status-closed {
+        background: rgba(148, 163, 184, 0.15);
+        color: #94a3b8;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .badge-priority {
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .priority-urgent {
+        background: rgba(244, 63, 94, 0.2);
+        color: var(--accent-rose);
+        border: 1px solid rgba(244, 63, 94, 0.4);
+    }
+
+    .priority-high {
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--accent-amber);
+        border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .priority-medium {
+        background: rgba(6, 182, 212, 0.15);
+        color: var(--accent-cyan);
+        border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    .priority-low {
+        background: rgba(148, 163, 184, 0.15);
+        color: #94a3b8;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    /* Message Thread */
+    .message-bubble {
+        border-radius: 14px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--bg-card-border);
+        transition: border-color 0.2s;
+    }
+
+    .message-bubble.internal {
+        background: rgba(245, 158, 11, 0.05);
+        border: 1px dashed rgba(245, 158, 11, 0.35);
+    }
+
+    .message-bubble.coordinator {
+        border-left: 3px solid var(--accent-cyan);
+    }
+
+    .message-bubble.developer {
+        border-left: 3px solid var(--accent-rose);
+    }
+
+    .message-bubble.student {
+        border-left: 3px solid var(--accent-purple);
+    }
+
+    .message-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        font-size: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 18px;">
+    <a href="{{ url_for('tickets_list') }}" class="btn" style="background: rgba(255, 255, 255, 0.05); color: var(--text-muted); padding: 6px 14px; font-size: 12px; border: 1px solid var(--bg-card-border); text-decoration: none; border-radius: var(--radius-md); display: inline-flex; align-items: center; gap: 6px;">
+        <i class="fa-solid fa-arrow-left"></i> Back to All Tickets
+    </a>
+</div>
+
+<div class="ticket-view-container">
+    <!-- Left Main Area: Header, Description, Resolution, and Messages -->
+    <div class="ticket-main">
+        <!-- Main Ticket Header & Details Card -->
+        <div class="ticket-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-family: monospace; font-weight: 700; color: var(--accent-cyan); font-size: 14px; background: rgba(6, 182, 212, 0.12); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(6, 182, 212, 0.3);">
+                        {{ ticket.ticket_number }}
+                    </span>
+                    <span class="badge-status status-{{ ticket.status }}">
+                        <i class="fa-solid {% if ticket.status == 'open' %}fa-clock{% elif ticket.status == 'in_progress' %}fa-spinner fa-spin{% elif ticket.status == 'resolved' %}fa-check{% else %}fa-lock{% endif %}"></i>
+                        {{ ticket.status|replace('_', ' ')|capitalize }}
+                    </span>
+                    <span class="badge-priority priority-{{ ticket.priority }}">
+                        {{ ticket.priority|capitalize }}
+                    </span>
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    Created: <strong>{{ ticket.created_at }}</strong>
+                </div>
+            </div>
+
+            <h1 style="font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 12px; line-height: 1.4;">
+                {{ ticket.title }}
+            </h1>
+
+            <div style="display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: var(--text-muted); padding-bottom: 16px; border-bottom: 1px solid var(--bg-card-border); margin-bottom: 18px; flex-wrap: wrap;">
+                <div>
+                    <i class="fa-solid fa-user" style="color: var(--accent-cyan);"></i> Filed by:
+                    <strong style="color: #fff;">{{ ticket.creator_username }}</strong> ({{ ticket.creator_role|capitalize }})
+                </div>
+                <div>
+                    <i class="fa-solid fa-bullseye" style="color: var(--accent-amber);"></i> Routing:
+                    <strong style="color: #fff;">{% if ticket.target_role == 'developer' %}Engineering Developers{% else %}Placement Cell Coordinators{% endif %}</strong>
+                </div>
+                <div>
+                    <i class="fa-solid fa-tag" style="color: var(--accent-purple);"></i> Category:
+                    <strong style="color: #fff;">{{ ticket.category|replace('_', ' ')|capitalize }}</strong>
+                </div>
+                {% if ticket.student_id %}
+                <div>
+                    <i class="fa-solid fa-id-card" style="color: var(--accent-emerald);"></i> Student USN:
+                    <strong style="color: var(--accent-cyan); font-family: monospace;">{{ ticket.student_id }}</strong>
+                </div>
+                {% endif %}
+            </div>
+
+            <div style="font-size: 14.5px; line-height: 1.7; color: #e2e8f0; white-space: pre-wrap;">{{ ticket.description }}</div>
+        </div>
+
+        {% if ticket.resolution_notes %}
+        <!-- Official Resolution Highlight Banner -->
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 14px; padding: 18px 20px; backdrop-filter: blur(10px);">
+            <div style="font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 700; color: var(--accent-emerald); display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <i class="fa-solid fa-circle-check"></i> Official Resolution
+            </div>
+            <div style="font-size: 13.5px; color: #f1f5f9; line-height: 1.6; white-space: pre-wrap;">{{ ticket.resolution_notes }}</div>
+        </div>
+        {% endif %}
+
+        <!-- Threaded Discussion / Activity History -->
+        <div class="ticket-card">
+            <h3 style="font-family: 'Outfit', sans-serif; font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-comments" style="color: var(--accent-cyan);"></i> Activity &amp; Conversation ({{ messages|length }})
+            </h3>
+
+            {% if messages %}
+                {% for m in messages %}
+                <div class="message-bubble {% if m.is_internal_note %}internal{% elif m.sender_role == 'placement' %}coordinator{% elif m.sender_role == 'developer' %}developer{% else %}student{% endif %}">
+                    <div class="message-header">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid {% if m.sender_role == 'developer' %}fa-code{% elif m.sender_role == 'placement' %}fa-user-tie{% else %}fa-graduation-cap{% endif %}" style="color: {% if m.sender_role == 'developer' %}var(--accent-rose){% elif m.sender_role == 'placement' %}var(--accent-cyan){% else %}var(--accent-purple){% endif %};"></i>
+                            <strong style="color: #fff;">{{ m.sender_username }}</strong>
+                            <span style="font-size: 10px; padding: 1px 6px; border-radius: 10px; background: rgba(255,255,255,0.06); color: var(--text-muted);">
+                                {{ m.sender_role|capitalize }}
+                            </span>
+                            {% if m.is_internal_note %}
+                            <span style="font-size: 10px; padding: 2px 7px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); font-weight: 700;">
+                                <i class="fa-solid fa-lock"></i> Internal Note
+                            </span>
+                            {% endif %}
+                        </div>
+                        <span style="color: var(--text-muted); font-size: 11px;">{{ m.created_at }}</span>
+                    </div>
+                    <div style="font-size: 13.5px; line-height: 1.6; color: #e2e8f0; white-space: pre-wrap;">{{ m.message }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="font-size: 13px; color: var(--text-muted); text-align: center; padding: 20px 0;">
+                    No messages or responses posted yet.
+                </div>
+            {% endif %}
+
+            <!-- Post Reply Box -->
+            <form action="{{ url_for('reply_ticket_route', ticket_id=ticket.id) }}" method="POST" style="margin-top: 18px; display: flex; flex-direction: column; gap: 12px;">
+                <textarea name="message" class="form-control" rows="3" placeholder="Write a response or follow-up note..." required style="font-size: 13.5px; line-height: 1.5;"></textarea>
+                
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        {% if not current_user.is_student %}
+                        <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer;">
+                            <input type="checkbox" name="is_internal_note" value="1" style="accent-color: var(--accent-amber);">
+                            <span>Post as Internal Team Note (Hidden from Student)</span>
+                        </label>
+                        {% endif %}
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="padding: 7px 18px; font-size: 13px;">
+                        <i class="fa-solid fa-reply"></i> Send Response
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right Sidebar: Status Management & Context -->
+    <div class="ticket-sidebar">
+        <!-- Status Management Card -->
+        <div class="ticket-card">
+            <h4 style="font-family: 'Outfit', sans-serif; font-size: 14.5px; font-weight: 600; color: #fff; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Status &amp; Workflow
+            </h4>
+
+            {% if not current_user.is_student %}
+            <!-- Placement & Developer Status Form -->
+            <form action="{{ url_for('update_ticket_status_route', ticket_id=ticket.id) }}" method="POST" style="display: flex; flex-direction: column; gap: 14px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label" style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Update Status</label>
+                    <select name="status" class="form-select" id="status-select" onchange="toggleResolutionField(this.value)" style="font-size: 12.5px;">
+                        <option value="open" {% if ticket.status == 'open' %}selected{% endif %}>Open</option>
+                        <option value="in_progress" {% if ticket.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                        <option value="resolved" {% if ticket.status == 'resolved' %}selected{% endif %}>Resolved</option>
+                        <option value="closed" {% if ticket.status == 'closed' %}selected{% endif %}>Closed</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="resolution-notes-box" style="margin-bottom: 0; display: {% if ticket.status == 'resolved' %}block{% else %}none{% endif %};">
+                    <label class="form-label" style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Resolution Summary Notes</label>
+                    <textarea name="resolution_notes" class="form-control" rows="3" placeholder="Document the fix, policy decision, or record update..." style="font-size: 12px;">{{ ticket.resolution_notes or '' }}</textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; font-size: 12.5px; padding: 8px;">
+                    <i class="fa-solid fa-check"></i> Update Ticket Status
+                </button>
+            </form>
+            {% else %}
+            <!-- Student Action Panel -->
+            <div style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+                Current state: <strong style="color: #fff;">{{ ticket.status|replace('_', ' ')|capitalize }}</strong>.
+                {% if ticket.status == 'resolved' %}
+                The support team has marked this issue as resolved. Please verify the solution.
+                <form action="{{ url_for('update_ticket_status_route', ticket_id=ticket.id) }}" method="POST" style="margin-top: 10px;">
+                    <input type="hidden" name="status" value="closed">
+                    <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; font-size: 12px; padding: 7px;">
+                        <i class="fa-solid fa-circle-check"></i> Confirm &amp; Close Ticket
+                    </button>
+                </form>
+                {% elif ticket.status == 'closed' %}
+                This ticket is closed. If the discrepancy persists, you can post a reply below to reopen it.
+                {% else %}
+                Your issue is currently queued with the assigned team. You will be notified of responses.
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        {% if student_record %}
+        <!-- Verified Academic Snapshot Card (Shown to Coordinator / Developer) -->
+        <div class="ticket-card" style="border-color: rgba(139, 92, 246, 0.3);">
+            <div style="font-family: 'Outfit', sans-serif; font-size: 13.5px; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+                <span><i class="fa-solid fa-id-card" style="color: var(--accent-purple);"></i> Student Roster Data</span>
+                <span style="font-size: 10px; color: var(--accent-emerald);"><i class="fa-solid fa-shield-check"></i> Verified</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+                <div style="background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 8px;">
+                    <span style="font-size: 10px; color: var(--text-muted); display: block;">CGPA</span>
+                    <strong style="color: var(--accent-cyan); font-size: 14px;">{{ student_record.get('CGPA', '—') }}</strong>
+                </div>
+                <div style="background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 8px;">
+                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Branch</span>
+                    <strong style="color: #fff; font-size: 12px;">{{ student_record.get('Branch', '—') }}</strong>
+                </div>
+                <div style="background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 8px;">
+                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Backlogs</span>
+                    <strong style="color: {% if student_record.get('Backlogs', 0)|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %}; font-size: 13px;">
+                        {{ student_record.get('Backlogs', 0) }}
+                    </strong>
+                </div>
+                <div style="background: rgba(0,0,0,0.25); padding: 8px 10px; border-radius: 8px;">
+                    <span style="font-size: 10px; color: var(--text-muted); display: block;">Drive Status</span>
+                    <strong style="color: #fff; font-size: 11px;">
+                        {{ student_record.get('Placed_Company', 'Eligible') if student_record.get('Placed_Company') and student_record.get('Placed_Company') not in ['No', 'None', '-'] else 'Eligible' }}
+                    </strong>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function toggleResolutionField(val) {
+        const box = document.getElementById('resolution-notes-box');
+        if (box) {
+            box.style.display = (val === 'resolved') ? 'block' : 'none';
+        }
+    }
+</script>
+{% endblock %}

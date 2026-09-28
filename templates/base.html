@@ -567,6 +567,14 @@
                 <i class="fa-solid fa-comments"></i> Q&A Studio
             </a>
             {% if current_user.is_authenticated %}
+            <a href="{{ url_for('tickets_list') }}" class="nav-link {% if active_page == 'tickets' %}active{% endif %}">
+                <i class="fa-solid fa-headset" style="color: var(--accent-cyan);"></i> Issue Resolver
+                {% if open_tickets_count and open_tickets_count > 0 %}
+                <span class="status-badge" style="font-size: 10px; padding: 2px 7px; background: rgba(244, 63, 94, 0.2); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.4); margin-left: auto;">
+                    {{ open_tickets_count }}
+                </span>
+                {% endif %}
+            </a>
             <a href="{{ url_for('profile_page') }}" class="nav-link {% if active_page == 'profile' %}active{% endif %}">
                 <i class="fa-solid fa-id-badge"></i> My Profile
             </a>

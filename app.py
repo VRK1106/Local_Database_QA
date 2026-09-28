@@ -101,6 +101,19 @@ from src.scopes import (
     scope_for
 )
 from src.cli import create_developer_cmd
+from src.tickets import (
+    create_ticket,
+    get_ticket_by_id,
+    can_user_access_ticket,
+    get_tickets_for_user,
+    add_ticket_message,
+    get_ticket_messages,
+    update_ticket_status,
+    get_ticket_stats,
+    CATEGORIES_STUDENT,
+    CATEGORIES_PLACEMENT,
+    CATEGORIES_DEVELOPER,
+)
 
 app = Flask(__name__)
 app.secret_key = APP_SECRET_KEY
@@ -214,11 +227,19 @@ def inject_global_vars():
     db_stats = stats()
     ollama_ok = check_ollama_health()
     available_models = list_ollama_models()
+    open_tickets_count = 0
+    if current_user.is_authenticated:
+        try:
+            stats_dict = get_ticket_stats(current_user)
+            open_tickets_count = stats_dict.get('open', 0)
+        except Exception:
+            open_tickets_count = 0
     return {
         "db_stats": db_stats,
         "ollama_ok": ollama_ok,
         "available_models": available_models,
-        "embedding_model": EMBEDDING_MODEL_NAME
+        "embedding_model": EMBEDDING_MODEL_NAME,
+        "open_tickets_count": open_tickets_count
     }
 
 
@@ -1259,6 +1280,255 @@ def stop_voice_typing():
     if success:
         return jsonify({"status": "success", "message": "Triggered Esc"})
     return jsonify({"status": "error", "message": err_msg or "Failed to trigger Esc"}), 500
+
+
+# =========================================================================
+# Issue Resolving & Support Ticket Routes
+# =========================================================================
+
+@app.route('/tickets', methods=['GET'])
+@login_required
+def tickets_list():
+    """List issues and support tickets scoped strictly to user role."""
+    status_filter = request.args.get('status')
+    category_filter = request.args.get('category')
+    priority_filter = request.args.get('priority')
+    target_filter = request.args.get('target')
+
+    tickets = get_tickets_for_user(
+        current_user,
+        status_filter=status_filter,
+        category_filter=category_filter,
+        priority_filter=priority_filter,
+        target_filter=target_filter
+    )
+    ticket_stats = get_ticket_stats(current_user)
+
+    # Determine eligible categories and available targets based on role
+    if current_user.is_student:
+        available_categories = CATEGORIES_STUDENT
+        default_target = "placement"
+    elif current_user.is_placement:
+        available_categories = CATEGORIES_PLACEMENT
+        default_target = "developer"
+    else:
+        available_categories = CATEGORIES_DEVELOPER + CATEGORIES_PLACEMENT
+        default_target = "placement"
+
+    return render_template(
+        'tickets/list.html',
+        active_page='tickets',
+        tickets=tickets,
+        ticket_stats=ticket_stats,
+        available_categories=available_categories,
+        default_target=default_target,
+        status_filter=status_filter,
+        category_filter=category_filter,
+        priority_filter=priority_filter,
+        target_filter=target_filter
+    )
+
+
+@app.route('/tickets/create', methods=['POST'])
+@login_required
+def create_ticket_route():
+    """File a new issue / discrepancy ticket."""
+    title = request.form.get('title', '').strip()
+    category = request.form.get('category', '').strip()
+    priority = request.form.get('priority', 'medium').strip().lower()
+    description = request.form.get('description', '').strip()
+    target_role = request.form.get('target_role', '').strip().lower()
+
+    if not title or not description:
+        flash("Ticket title and description cannot be empty.", "warning")
+        return redirect(url_for('tickets_list'))
+
+    # If student, target is placement by default unless reporting a technical system issue
+    if current_user.is_student:
+        if category == "technical_issue":
+            target_role = target_role if target_role in ("placement", "developer") else "developer"
+        else:
+            target_role = "placement"
+        student_id = current_user.student_id or None
+    elif current_user.is_placement:
+        target_role = target_role if target_role in ("placement", "developer") else "developer"
+        student_id = request.form.get('student_id', '').strip() or None
+    else:
+        target_role = target_role if target_role in ("placement", "developer") else "placement"
+        student_id = request.form.get('student_id', '').strip() or None
+
+    ticket_id = create_ticket(
+        creator_id=current_user.id,
+        creator_username=current_user.username,
+        creator_role=current_user.role,
+        target_role=target_role,
+        category=category,
+        priority=priority,
+        title=title,
+        description=description,
+        student_id=student_id
+    )
+
+    log_audit_event(
+        actor_user_id=current_user.id,
+        actor_username=current_user.username,
+        effective_role=current_user.role,
+        action="ticket.create",
+        endpoint="/tickets/create",
+        detail=f"Created ticket #{ticket_id}: '{title}' -> target: {target_role}",
+        status="success",
+        ip_address=request.remote_addr
+    )
+
+    flash("Issue ticket submitted successfully. Support team has been notified.", "success")
+    return redirect(url_for('view_ticket_route', ticket_id=ticket_id))
+
+
+@app.route('/tickets/<int:ticket_id>', methods=['GET'])
+@login_required
+def view_ticket_route(ticket_id: int):
+    """View ticket details, student record context, and discussion thread."""
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket:
+        flash("Ticket not found.", "warning")
+        return redirect(url_for('tickets_list'))
+
+    if not can_user_access_ticket(current_user, ticket):
+        log_audit_event(
+            actor_user_id=current_user.id,
+            actor_username=current_user.username,
+            effective_role=current_user.role,
+            action="ticket.unauthorized_access",
+            endpoint=f"/tickets/{ticket_id}",
+            detail=f"Denied access to ticket #{ticket_id}",
+            status="forbidden",
+            ip_address=request.remote_addr
+        )
+        flash("Access Denied: You do not have permission to view this ticket.", "danger")
+        return redirect(url_for('tickets_list'))
+
+    # Student cannot see internal notes; coordinators and developers can
+    messages = get_ticket_messages(ticket_id, include_internal=not current_user.is_student)
+
+    # Optional: fetch student record snapshot if ticket has a student_id
+    student_record = None
+    if ticket.get("student_id"):
+        try:
+            student_record = get_student_record(ticket["student_id"], DOCUMENTS_DIR)
+        except Exception:
+            student_record = None
+
+    return render_template(
+        'tickets/view.html',
+        active_page='tickets',
+        ticket=ticket,
+        messages=messages,
+        student_record=student_record
+    )
+
+
+@app.route('/tickets/<int:ticket_id>/reply', methods=['POST'])
+@login_required
+def reply_ticket_route(ticket_id: int):
+    """Post a threaded reply or internal note on a ticket."""
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket or not can_user_access_ticket(current_user, ticket):
+        flash("Access Denied or Ticket not found.", "danger")
+        return redirect(url_for('tickets_list'))
+
+    message = request.form.get('message', '').strip()
+    if not message:
+        flash("Message cannot be blank.", "warning")
+        return redirect(url_for('view_ticket_route', ticket_id=ticket_id))
+
+    is_internal = False
+    # Only placement officers and developers can post internal notes
+    if not current_user.is_student:
+        is_internal = request.form.get('is_internal_note') == '1'
+
+    add_ticket_message(
+        ticket_id=ticket_id,
+        sender_id=current_user.id,
+        sender_username=current_user.username,
+        sender_role=current_user.role,
+        message=message,
+        is_internal_note=is_internal
+    )
+
+    # If ticket was resolved or closed and student replies, reopen ticket as in_progress
+    if current_user.is_student and ticket["status"] in ("resolved", "closed"):
+        update_ticket_status(ticket_id, "in_progress")
+
+    log_audit_event(
+        actor_user_id=current_user.id,
+        actor_username=current_user.username,
+        effective_role=current_user.role,
+        action="ticket.reply",
+        endpoint=f"/tickets/{ticket_id}/reply",
+        detail=f"Replied on ticket #{ticket_id} (Internal Note: {is_internal})",
+        status="success",
+        ip_address=request.remote_addr
+    )
+
+    flash("Reply posted successfully.", "success")
+    return redirect(url_for('view_ticket_route', ticket_id=ticket_id))
+
+
+@app.route('/tickets/<int:ticket_id>/status', methods=['POST'])
+@login_required
+def update_ticket_status_route(ticket_id: int):
+    """Update ticket resolution status and documentation."""
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket or not can_user_access_ticket(current_user, ticket):
+        flash("Access Denied or Ticket not found.", "danger")
+        return redirect(url_for('tickets_list'))
+
+    new_status = request.form.get('status', '').strip().lower()
+    resolution_notes = request.form.get('resolution_notes', None)
+
+    # Students can only close their own ticket if it is resolved, or reopen it
+    if current_user.is_student:
+        if new_status not in ("closed", "open"):
+            flash("Students can only mark resolved tickets as Closed or Reopen them.", "warning")
+            return redirect(url_for('view_ticket_route', ticket_id=ticket_id))
+    else:
+        # Placement and Developers have full status management
+        if new_status not in ("open", "in_progress", "resolved", "closed"):
+            flash("Invalid status selected.", "warning")
+            return redirect(url_for('view_ticket_route', ticket_id=ticket_id))
+
+    update_ticket_status(
+        ticket_id=ticket_id,
+        new_status=new_status,
+        resolution_notes=resolution_notes,
+        assigned_to_id=current_user.id if new_status == 'in_progress' and not ticket.get('assigned_to_id') else None,
+        assigned_to_username=current_user.username if new_status == 'in_progress' and not ticket.get('assigned_to_id') else None
+    )
+
+    # If resolution notes were provided, also record them as an explicit system message in the thread
+    if resolution_notes and resolution_notes.strip():
+        add_ticket_message(
+            ticket_id=ticket_id,
+            sender_id=current_user.id,
+            sender_username=current_user.username,
+            sender_role=current_user.role,
+            message=f"**Official Resolution:** {resolution_notes.strip()}",
+            is_internal_note=False
+        )
+
+    log_audit_event(
+        actor_user_id=current_user.id,
+        actor_username=current_user.username,
+        effective_role=current_user.role,
+        action="ticket.status_update",
+        endpoint=f"/tickets/{ticket_id}/status",
+        detail=f"Ticket #{ticket_id} status changed to '{new_status}'",
+        status="success",
+        ip_address=request.remote_addr
+    )
+
+    flash(f"Ticket status updated to {new_status.replace('_', ' ').capitalize()}.", "info")
+    return redirect(url_for('view_ticket_route', ticket_id=ticket_id))
 
 
 @app.errorhandler(403)

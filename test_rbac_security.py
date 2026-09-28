@@ -17,7 +17,8 @@ from src.auth import (
     set_user_active_status,
     get_audit_logs,
     count_active_developers,
-    verify_user_password
+    verify_user_password,
+    User
 )
 from src.scopes import scope_for
 
@@ -269,9 +270,123 @@ def run_tests():
     assert any('impersonate' in a for a in dev_actions)
     print(f"[PASS] Test 23b: Global developer audit view captures all events including impersonate ({len(dev_logs)} events)")
 
+    # -------------------------------------------------------------
+    # PART 8: TICKET-BASED ISSUE RESOLUTION & PRIVACY SUITE
+    # -------------------------------------------------------------
+    from src.tickets import (
+        create_ticket,
+        get_ticket_by_id,
+        can_user_access_ticket,
+        get_tickets_for_user,
+        add_ticket_message,
+        get_ticket_messages,
+        update_ticket_status,
+        get_ticket_stats
+    )
+
+    # User objects for ticket test operations
+    stu_dict = get_user_by_username("stu001")
+    student_user = User(id=stu_dict["id"], username=stu_dict["username"], role=stu_dict["role"], student_id=stu_dict["student_id"])
+
+    off_dict = get_user_by_username("admin")
+    officer_user = User(id=off_dict["id"], username=off_dict["username"], role=off_dict["role"])
+
+    dev_dict = get_user_by_username("dev_admin")
+    dev_user = User(id=dev_dict["id"], username=dev_dict["username"], role=dev_dict["role"])
+
+    # Ensure logged in as student stu001
+    client.get('/logout', follow_redirects=True)
+    client.post('/login', data={'username': 'stu001', 'password': 'Password@123'}, follow_redirects=True)
+
+    # Test 24: Student files an issue ticket targeted to placement cell
+    stu_res = client.post('/tickets/create', data={
+        "title": "Discrepancy in recorded CGPA",
+        "category": "academic_record",
+        "priority": "high",
+        "description": "My CGPA on portal is 8.1 but official transcript reflects 8.65.",
+        "target_role": "placement"
+    }, follow_redirects=True)
+    assert stu_res.status_code == 200
+    assert b"Issue ticket submitted successfully" in stu_res.data
+    print("[PASS] Test 24: Student creates academic record discrepancy ticket targeted to Placement Cell")
+
+    # Find the ticket created
+    stu_tickets = get_tickets_for_user(student_user)
+    assert len(stu_tickets) > 0
+    t_student = stu_tickets[0]
+    t_id = t_student["id"]
+
+    # Test 25: Zero-Trust Scoping: Another unassociated student cannot view this ticket
+    another_student = User(id=9999, username="attacker_stu", role="student", student_id="STU999")
+    assert not can_user_access_ticket(another_student, t_student)
+    print("[PASS] Test 25: Zero-Trust verified: Other students strictly blocked from ticket access")
+
+    # Test 26: Placement Coordinator views ticket and responds
+    client.get('/logout', follow_redirects=True)
+    client.post('/login', data={'username': 'admin', 'password': 'admin123'}, follow_redirects=True)
+
+    officer_view = client.get(f'/tickets/{t_id}', follow_redirects=True)
+    assert officer_view.status_code == 200
+    assert b"Discrepancy in recorded CGPA" in officer_view.data
+
+    # Placement coordinator posts an internal note and public reply
+    add_ticket_message(t_id, officer_user.id, officer_user.username, officer_user.role, "Checking with exam cell records", is_internal_note=True)
+    add_ticket_message(t_id, officer_user.id, officer_user.username, officer_user.role, "We received your transcript copy and are syncing with the exam branch.", is_internal_note=False)
+    update_ticket_status(t_id, "in_progress")
+    print("[PASS] Test 26: Placement Coordinator triaged ticket, appended internal note, and set status to In Progress")
+
+    # Test 27: Privacy Guard: Student cannot see internal notes
+    messages_for_student = get_ticket_messages(t_id, include_internal=False)
+    assert not any(m["is_internal_note"] == 1 for m in messages_for_student)
+    assert any("syncing with the exam branch" in m["message"] for m in messages_for_student)
+    print("[PASS] Test 27: Privacy Guard verified: Student view strictly excludes internal coordinator notes")
+
+    # Test 28: Placement Coordinator creates engineering issue ticket to Developer
+    off_ticket_res = client.post('/tickets/create', data={
+        "title": "ChromaDB vector collection needs full re-indexing",
+        "category": "vector_db_sync",
+        "priority": "urgent",
+        "description": "Notice circular #12 embeddings seem misaligned during search.",
+        "target_role": "developer"
+    }, follow_redirects=True)
+    assert off_ticket_res.status_code == 200
+    print("[PASS] Test 28: Placement Coordinator filed technical escalation ticket to Engineering Developers")
+
+    # Test 29: Developer resolves ticket with resolution notes
+    client.get('/logout', follow_redirects=True)
+    dev_log_res = client.post('/login', data={'username': 'dev_admin', 'password': 'DeveloperPass@1234'}, follow_redirects=True)
+    assert dev_log_res.status_code == 200
+    assert b"Signed in successfully" in dev_log_res.data or b"dev_admin" in dev_log_res.data
+
+    dev_tickets = get_tickets_for_user(dev_user, target_filter="developer")
+    assert len(dev_tickets) > 0
+    t_dev = dev_tickets[0]
+
+    dev_resolve = client.post(f'/tickets/{t_dev["id"]}/status', data={
+        "status": "resolved",
+        "resolution_notes": "Completed ChromaDB collection re-index; cosine recall restored."
+    }, follow_redirects=True)
+    assert dev_resolve.status_code == 200
+    t_dev_updated = get_ticket_by_id(t_dev["id"])
+    assert t_dev_updated["status"] == "resolved"
+    assert "cosine recall restored" in t_dev_updated["resolution_notes"]
+    print("[PASS] Test 29: Developer triaged and resolved technical ticket with verified resolution notes")
+
+    # Test 30: Student marks resolved academic ticket as closed
+    client.get('/logout', follow_redirects=True)
+    client.post('/login', data={'username': 'stu001', 'password': 'Password@123'}, follow_redirects=True)
+
+    update_ticket_status(t_id, "resolved", resolution_notes="CGPA corrected in database to 8.65")
+    close_res = client.post(f'/tickets/{t_id}/status', data={"status": "closed"}, follow_redirects=True)
+    assert close_res.status_code == 200
+    t_stu_final = get_ticket_by_id(t_id)
+    assert t_stu_final["status"] == "closed"
+    print("[PASS] Test 30: Student successfully confirmed resolution and marked ticket as Closed")
+
     print("\n" + "=" * 65)
-    print(" ALL 23 RBAC, DEVELOPER & DATA ISOLATION PENETRATION TESTS PASSED!")
+    print(" ALL 30 RBAC, DEVELOPER, ISOLATION & TICKET SYSTEM TESTS PASSED!")
     print("=" * 65)
 
 if __name__ == '__main__':
     run_tests()
+
