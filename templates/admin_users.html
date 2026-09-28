@@ -54,7 +54,9 @@
                     <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Role</label>
                     <select name="role" class="form-select">
                         <option value="student">Student</option>
+                        {% if current_user.has_permission('users.create_placement') %}
                         <option value="placement">Placement Officer</option>
+                        {% endif %}
                     </select>
                 </div>
             </div>

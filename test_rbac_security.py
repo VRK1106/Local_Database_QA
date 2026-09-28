@@ -47,6 +47,14 @@ def run_tests():
             password="DeveloperPass@1234"
         )
 
+    # Ensure dev_admin has role 'developer' and is active, and clean up auxiliary test accounts
+    from src.auth import get_db_connection
+    conn = get_db_connection()
+    conn.execute("UPDATE users SET role = 'developer', active = 1 WHERE username = 'dev_admin'")
+    conn.execute("DELETE FROM users WHERE username = 'test_dev_cli'")
+    conn.commit()
+    conn.close()
+
     # -------------------------------------------------------------
     # PART 1: UNAUTHENTICATED RESTRICTIONS
     # -------------------------------------------------------------
@@ -83,7 +91,13 @@ def run_tests():
 
     res = client.get('/audit_logs')
     assert res.status_code == 200
-    print("[PASS] Test 5b: Placement Officer can access /audit_logs")
+    assert b"dev_admin" not in res.data
+    print("[PASS] Test 5b: Placement Officer can access /audit_logs (developer events strictly isolated)")
+
+    res = client.get('/admin/users')
+    assert res.status_code == 200
+    assert b"dev_admin" not in res.data
+    print("[PASS] Test 5c: Placement Officer user list (/admin/users) isolates students and own account only (no developers)")
 
     # Test 6: Officer CANNOT access Developer portal (/dev/dashboard) -> Access Denied redirect
     res = client.get('/dev/dashboard', follow_redirects=True)
@@ -195,6 +209,17 @@ def run_tests():
         assert sess['view_as']['role'] == 'student'
         assert sess['view_as']['student_id'] == 'STU001'
     print("[PASS] Test 18: Developer impersonation of Student STU001 activated successfully")
+
+    # Test 18b: Start Impersonation as Placement Officer via form post (Fix 415 bug test)
+    res = client.post('/dev/view_as', data={'role': 'placement'}, follow_redirects=True)
+    assert res.status_code == 200
+    with client.session_transaction() as sess:
+        assert sess.get('view_as') is not None
+        assert sess['view_as']['role'] == 'placement'
+    print("[PASS] Test 18b: Developer impersonation of Placement Officer (Form POST without student_id) succeeded without 415 error")
+
+    # Re-enter student impersonation for subsequent drop test
+    client.post('/dev/view_as', data={'role': 'student', 'student_id': 'STU001'}, follow_redirects=True)
 
     # Test 19: While impersonating, Developer's permissions are dropped (Access to /dev/danger redirected with Access Denied)
     res = client.get('/dev/danger', follow_redirects=True)

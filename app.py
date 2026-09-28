@@ -329,7 +329,16 @@ def admin_users_page():
     """User account administration and student batch import view."""
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, role, student_id, must_change_password, active, created_at FROM users ORDER BY id DESC")
+    if has_permission(current_user, 'users.set_role'):
+        cur.execute("SELECT id, username, role, student_id, must_change_password, active, created_at FROM users ORDER BY id DESC")
+    else:
+        # Placement officer view: isolate strictly to students and own coordinator account
+        cur.execute("""
+            SELECT id, username, role, student_id, must_change_password, active, created_at 
+            FROM users 
+            WHERE role = 'student' OR id = ?
+            ORDER BY id DESC
+        """, (current_user.id,))
     users = [dict(r) for r in cur.fetchall()]
     conn.close()
     return render_template('admin_users.html', users=users, active_page='users')
@@ -416,7 +425,11 @@ def admin_import_students():
 def audit_logs_page():
     """Security audit log viewer for compliance monitoring."""
     include_dev = has_permission(current_user, 'audit.view_all')
-    logs = get_audit_logs(200, include_developer_actions=include_dev)
+    logs = get_audit_logs(
+        200,
+        include_developer_actions=include_dev,
+        officer_user_id=None if include_dev else current_user.id
+    )
     return render_template('audit_logs.html', logs=logs, active_page='audit')
 
 
@@ -546,9 +559,10 @@ def dev_reset_db():
     Destructive database wipe strictly reserved for developer.
     Requires password re-auth, reason string (>= 10 chars), and typed 'RESET' confirmation.
     """
-    password = request.form.get('password') or (request.get_json() or {}).get('password', '')
-    confirm_text = request.form.get('confirm') or (request.get_json() or {}).get('confirm', '')
-    reason = (request.form.get('reason') or (request.get_json() or {}).get('reason', '')).strip()
+    json_data = request.get_json(silent=True) or {}
+    password = request.form.get('password') or json_data.get('password', '')
+    confirm_text = request.form.get('confirm') or json_data.get('confirm', '')
+    reason = (request.form.get('reason') or json_data.get('reason', '')).strip()
 
     is_json = request.is_json or request.path.startswith('/api/')
 
@@ -611,16 +625,16 @@ def dev_reset_db():
 @login_required
 def start_view_as():
     """Enter developer impersonation ('view as') mode with automatic permission drop."""
-    target_role = (request.form.get('role') or (request.get_json() or {}).get('role', '')).strip().lower()
-    target_stu_id = (request.form.get('student_id') or (request.get_json() or {}).get('student_id', '')).strip()
+    if not getattr(current_user, 'is_developer', False):
+        abort(403)
+
+    json_data = request.get_json(silent=True) or {}
+    target_role = (request.form.get('role') or json_data.get('role', '')).strip().lower()
+    target_stu_id = (request.form.get('student_id') or json_data.get('student_id', '')).strip()
 
     if target_role == "student":
-        if not has_permission(current_user, "impersonate.student"):
-            abort(403)
         session["view_as"] = {"role": "student", "student_id": target_stu_id or "STU001"}
     elif target_role == "placement":
-        if not has_permission(current_user, "impersonate.placement"):
-            abort(403)
         session["view_as"] = {"role": "placement", "student_id": None}
     else:
         abort(400)

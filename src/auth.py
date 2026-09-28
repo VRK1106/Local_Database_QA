@@ -394,8 +394,17 @@ def log_audit_event(
         print(f"[AUDIT ERROR] Failed to record audit log: {e}")
 
 
-def get_audit_logs(limit: int = 150, include_developer_actions: bool = True) -> list[dict]:
-    """Retrieve recent audit logs, optionally filtering out developer actions if placement officer."""
+def get_audit_logs(
+    limit: int = 150,
+    include_developer_actions: bool = True,
+    officer_user_id: int | str | None = None
+) -> list[dict]:
+    """
+    Retrieve recent audit logs.
+    - Global developer view (include_developer_actions=True): all records.
+    - Scoped placement view (officer_user_id provided): only that specific officer's actions + student actions.
+    - General fallback: excludes developer actions.
+    """
     conn = get_db_connection()
     cur = conn.cursor()
     
@@ -414,8 +423,25 @@ def get_audit_logs(limit: int = 150, include_developer_actions: bool = True) -> 
             ORDER BY id DESC
             LIMIT ?
         """, (limit,))
+    elif officer_user_id:
+        cur.execute("""
+            SELECT id,
+                   COALESCE(actor_user_id, 0) AS actor_user_id,
+                   COALESCE(actor_username, 'anonymous') AS actor_username,
+                   COALESCE(effective_role, 'unauthenticated') AS effective_role,
+                   effective_student_id,
+                   action, endpoint,
+                   COALESCE(detail, '') AS detail,
+                   COALESCE(sources, '') AS sources,
+                   status, ip_address, timestamp
+            FROM audit_logs
+            WHERE effective_role = 'student'
+               OR (effective_role = 'placement' AND actor_user_id = ?)
+            ORDER BY id DESC
+            LIMIT ?
+        """, (str(officer_user_id), limit))
     else:
-        # Placement view: show student and placement actions only
+        # Placement view fallback: show student and placement actions only
         cur.execute("""
             SELECT id,
                    COALESCE(actor_user_id, 0) AS actor_user_id,

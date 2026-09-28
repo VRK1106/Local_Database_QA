@@ -431,7 +431,8 @@
         </div>
         {% endif %}
 
-        <!-- Sidebar Stats Card -->
+        {% if current_user.is_authenticated and current_user.has_permission('system.config') %}
+        <!-- Sidebar Stats Card (Developer Only) -->
         <div class="sidebar-stats">
             <div class="stat-item">
                 <span class="stat-label">Ollama Engine:</span>
@@ -450,6 +451,7 @@
                 <span class="stat-val">{{ db_stats.sources }} files</span>
             </div>
         </div>
+        {% endif %}
     </aside>
 
     <!-- Main Wrapper -->
