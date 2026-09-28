@@ -16,3 +16,4 @@ EMBEDDING_MODEL_NAME = 'BAAI/bge-small-en-v1.5'
 DEFAULT_OLLAMA_MODEL = 'qwen2.5-coder:latest' 
 APP_SECRET_KEY = os.environ.get('APP_SECRET_KEY', 'local-database-qa-system-fallback-key-2026') 
 ADMIN_TOKEN = os.environ.get('ADMIN_TOKEN', 'admin-secret-12345')
+AUTH_DB_PATH = BASE_DIR / 'auth.db'

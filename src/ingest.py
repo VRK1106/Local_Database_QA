@@ -320,10 +320,11 @@ def extract_pages(stream: BytesIO, filename: str) -> list[dict]:
         return extract_text_from_txt(stream)
 
 
-def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chunk_overlap: int = 50) -> list[dict]:
-    """Split extracted pages into overlapping text chunks with rich metadata and header prefix preservation."""
+def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chunk_overlap: int = 50, visibility: str = "internal") -> list[dict]:
+    """Split extracted pages into overlapping text chunks with rich metadata, visibility tagging, and header prefix preservation."""
     chunks = []
     chunk_counter = 0
+    clean_visibility = "public" if str(visibility).lower() == "public" else "internal"
 
     for page_info in pages:
         page_num = page_info["page"]
@@ -369,7 +370,8 @@ def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chun
                         "source": source_name,
                         "page": page_num,
                         "chunk_index": chunk_counter,
-                        "word_count": current_word_count + prefix_words
+                        "word_count": current_word_count + prefix_words,
+                        "visibility": clean_visibility
                     }
                 })
                 chunk_counter += 1
@@ -399,7 +401,8 @@ def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chun
                     "source": source_name,
                     "page": page_num,
                     "chunk_index": chunk_counter,
-                    "word_count": current_word_count + prefix_words
+                    "word_count": current_word_count + prefix_words,
+                    "visibility": clean_visibility
                 }
             })
             chunk_counter += 1

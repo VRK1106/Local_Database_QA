@@ -112,8 +112,9 @@ def search(
     top_k: int = 4,
     source_filters: list[str] | None = None,
     threshold: float = 0.0,
+    visibility: str | None = None,
 ) -> list[dict]:
-    """Query similarity search in ChromaDB and return ranked result objects."""
+    """Query similarity search in ChromaDB and return ranked result objects with strict visibility isolation."""
     with _chroma_lock:
         collection = get_collection()
         if not collection:
@@ -123,12 +124,23 @@ def search(
         if total_count == 0:
             return []
 
-        where_clause = None
+        where_conditions = []
         if source_filters:
             if len(source_filters) == 1:
-                where_clause = {"source": source_filters[0]}
+                where_conditions.append({"source": source_filters[0]})
             elif len(source_filters) > 1:
-                where_clause = {"source": {"$in": source_filters}}
+                where_conditions.append({"source": {"$in": source_filters}})
+
+        if visibility:
+            clean_vis = "public" if str(visibility).lower() == "public" else "internal"
+            where_conditions.append({"visibility": clean_vis})
+
+        if len(where_conditions) == 1:
+            where_clause = where_conditions[0]
+        elif len(where_conditions) > 1:
+            where_clause = {"$and": where_conditions}
+        else:
+            where_clause = None
 
         query_k = min(max(top_k * 2, 10), total_count)
 
@@ -148,10 +160,17 @@ def search(
             for text, meta, distance in zip(documents, metadatas, distances):
                 meta = meta or {}
                 source_name = meta.get("source", "Unknown Document")
+                chunk_visibility = meta.get("visibility", "internal")
                 
-                # Strict post-filter check
+                # Strict post-filter check on source
                 if source_filters and source_name not in source_filters:
                     continue
+
+                # Strict post-filter check on visibility (default deny for public requirements)
+                if visibility:
+                    clean_vis = "public" if str(visibility).lower() == "public" else "internal"
+                    if chunk_visibility != clean_vis:
+                        continue
 
                 score = max(0.0, 1.0 - float(distance))
                 if score >= threshold:
@@ -160,6 +179,7 @@ def search(
                         "source": source_name,
                         "page": meta.get("page", 1),
                         "chunk_index": meta.get("chunk_index", 0),
+                        "visibility": chunk_visibility,
                         "score": round(score, 4),
                     })
 
@@ -194,6 +214,34 @@ def delete_source(source_name: str) -> bool:
             return False
 
 
+def update_source_visibility(source_name: str, new_visibility: str) -> bool:
+    """Update visibility metadata ('public' or 'internal') across all chunks of a source document."""
+    clean_vis = "public" if str(new_visibility).lower() == "public" else "internal"
+    with _chroma_lock:
+        collection = get_collection()
+        if not collection:
+            return False
+        try:
+            res = collection.get(where={"source": source_name}, include=["metadatas"])
+            ids = res.get("ids") or []
+            metadatas = res.get("metadatas") or []
+            if not ids:
+                return False
+
+            updated_metas = []
+            for meta in metadatas:
+                m = dict(meta or {})
+                m["visibility"] = clean_vis
+                updated_metas.append(m)
+
+            collection.update(ids=ids, metadatas=updated_metas)
+            invalidate_stats_cache()
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to update visibility for {source_name}: {e}")
+            return False
+
+
 def get_source_chunks(source_name: str) -> list[dict]:
     """Retrieve all chunks of a specific document for inspection."""
     with _chroma_lock:
@@ -216,7 +264,8 @@ def get_source_chunks(source_name: str) -> list[dict]:
                     "id": doc_id,
                     "text": text,
                     "page": meta.get("page", 1),
-                    "chunk_index": meta.get("chunk_index", 0)
+                    "chunk_index": meta.get("chunk_index", 0),
+                    "visibility": meta.get("visibility", "internal")
                 })
             chunks.sort(key=lambda x: (x["page"], x["chunk_index"]))
             return chunks
@@ -253,6 +302,7 @@ def stats() -> dict:
 
             sources_dict: dict[str, int] = {}
             source_pages: dict[str, set[int]] = {}
+            source_visibility: dict[str, str] = {}
 
             result = collection.get(include=["metadatas"])
             for meta in result.get("metadatas") or []:
@@ -260,6 +310,8 @@ def stats() -> dict:
                 src = meta.get("source")
                 if src:
                     sources_dict[src] = sources_dict.get(src, 0) + 1
+                    vis = meta.get("visibility", "internal")
+                    source_visibility[src] = vis
                     page = meta.get("page")
                     if page is not None:
                         if src not in source_pages:
@@ -273,6 +325,7 @@ def stats() -> dict:
                     "name": src,
                     "chunks": sources_dict[src],
                     "pages": len(pages_set) if len(pages_set) > 0 else 1,
+                    "visibility": source_visibility.get(src, "internal"),
                 })
 
             res = {
