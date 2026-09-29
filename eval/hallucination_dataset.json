@@ -1,0 +1,162 @@
+[
+  {
+    "id": "HAL-01",
+    "type": "entailment",
+    "context": "Academic Threshold: Minimum Cumulative Grade Point Average (CGPA) of 7.50 with no active backlogs.",
+    "draft_claim": "Candidates must have a minimum CGPA of 7.50 without any active backlogs.",
+    "expected_status": "entailment",
+    "description": "Consistent paraphrase of academic threshold"
+  },
+  {
+    "id": "HAL-02",
+    "type": "contradiction_injected",
+    "context": "Academic Threshold: Minimum Cumulative Grade Point Average (CGPA) of 7.50 with no active backlogs.",
+    "draft_claim": "Students with up to 3 active backlogs are fully eligible for the drive.",
+    "expected_status": "contradiction",
+    "description": "Injected claim permits 3 backlogs when context strictly states no active backlogs"
+  },
+  {
+    "id": "HAL-03",
+    "type": "entailment",
+    "context": "Annual Cost to Company (CTC): INR 12,00,000/- Per Annum (Fixed: 10 LPA + Performance Bonus: 2 LPA).",
+    "draft_claim": "The company offers a total CTC of 12 LPA with a fixed component of 10 LPA.",
+    "expected_status": "entailment",
+    "description": "Accurate reflection of CTC breakdown"
+  },
+  {
+    "id": "HAL-04",
+    "type": "contradiction_injected",
+    "context": "Annual Cost to Company (CTC): INR 12,00,000/- Per Annum (Fixed: 10 LPA + Performance Bonus: 2 LPA).",
+    "draft_claim": "The annual salary package offered is 28 LPA fixed with no performance bonus.",
+    "expected_status": "contradiction",
+    "description": "Injected inflated CTC of 28 LPA contradicting the official 12 LPA"
+  },
+  {
+    "id": "HAL-05",
+    "type": "entailment",
+    "context": "Formal western attire is mandatory for all interview rounds. Carry 3 updated hard copies of resume.",
+    "draft_claim": "Students are required to wear formal western attire and bring 3 resume copies.",
+    "expected_status": "entailment",
+    "description": "Directly supported dress code and document requirements"
+  },
+  {
+    "id": "HAL-06",
+    "type": "contradiction_injected",
+    "context": "Formal western attire is mandatory for all interview rounds. Carry 3 updated hard copies of resume.",
+    "draft_claim": "Casual wear including t-shirts and jeans is permitted during the interview rounds.",
+    "expected_status": "contradiction",
+    "description": "Injected claim permits casual wear directly contradicting formal western requirement"
+  },
+  {
+    "id": "HAL-07",
+    "type": "entailment",
+    "context": "Stage 1: Online Technical Assessment (Data Structures, Algorithms, SQL, and CS Core Fundamentals) - 90 Minutes.",
+    "draft_claim": "The first assessment stage lasts for 90 minutes and covers data structures and algorithms.",
+    "expected_status": "entailment",
+    "description": "Accurate test duration and syllabus statement"
+  },
+  {
+    "id": "HAL-08",
+    "type": "contradiction_injected",
+    "context": "Stage 1: Online Technical Assessment (Data Structures, Algorithms, SQL, and CS Core Fundamentals) - 90 Minutes.",
+    "draft_claim": "The initial technical test is an untimed 15-minute multiple choice survey.",
+    "expected_status": "contradiction",
+    "description": "Injected 15-minute untimed claim directly contradicting 90-minute technical exam"
+  },
+  {
+    "id": "HAL-09",
+    "type": "entailment",
+    "context": "Dream Super Tier: CTC >= 20 LPA. Once a candidate secures an offer in Dream Super Tier, they are strictly de-registered from all subsequent placement processes.",
+    "draft_claim": "Students who secure an offer of 20 LPA or higher are de-registered from future placement drives.",
+    "expected_status": "entailment",
+    "description": "Accurate one-student one-offer policy statement"
+  },
+  {
+    "id": "HAL-10",
+    "type": "contradiction_injected",
+    "context": "Dream Super Tier: CTC >= 20 LPA. Once a candidate secures an offer in Dream Super Tier, they are strictly de-registered from all subsequent placement processes.",
+    "draft_claim": "Students securing a 20 LPA offer are encouraged to sit for unlimited subsequent company drives.",
+    "expected_status": "contradiction",
+    "description": "Injected unlimited applications claim contradicting strict de-registration rule"
+  },
+  {
+    "id": "HAL-11",
+    "type": "entailment",
+    "context": "Candidates possessing an offer in Core Tier are permitted exactly one upgrade attempt into Dream Tier or Dream Super Tier.",
+    "draft_claim": "Core Tier offer holders are allowed only a single upgrade attempt into higher tier companies.",
+    "expected_status": "entailment",
+    "description": "Accurate statement of one upgrade rule"
+  },
+  {
+    "id": "HAL-12",
+    "type": "contradiction_injected",
+    "context": "Candidates possessing an offer in Core Tier are permitted exactly one upgrade attempt into Dream Tier or Dream Super Tier.",
+    "draft_claim": "Candidates holding a Core Tier offer can make unlimited upgrade attempts into any company.",
+    "expected_status": "contradiction",
+    "description": "Injected unlimited upgrade claim contradicting exactly one attempt rule"
+  },
+  {
+    "id": "HAL-13",
+    "type": "entailment",
+    "context": "Any student found sharing internal coordinator drive spreadsheets will face immediate blacklisting for two recruitment quarters.",
+    "draft_claim": "Sharing confidential coordinator spreadsheets results in a two-quarter blacklisting penalty.",
+    "expected_status": "entailment",
+    "description": "Accurate penalty statement"
+  },
+  {
+    "id": "HAL-14",
+    "type": "contradiction_injected",
+    "context": "Any student found sharing internal coordinator drive spreadsheets will face immediate blacklisting for two recruitment quarters.",
+    "draft_claim": "Students are encouraged to share coordinator drive spreadsheets freely across social media.",
+    "expected_status": "contradiction",
+    "description": "Injected claim encourages sharing contradicting strict confidentiality rule"
+  },
+  {
+    "id": "HAL-15",
+    "type": "entailment",
+    "context": "Student Registration Deadline: October 20, 2025 at 17:00 IST. Late submissions will not be entertained.",
+    "draft_claim": "Registrations close on October 20, 2025 at 5:00 PM and late forms are rejected.",
+    "expected_status": "entailment",
+    "description": "Accurate registration deadline"
+  },
+  {
+    "id": "HAL-16",
+    "type": "contradiction_injected",
+    "context": "Student Registration Deadline: October 20, 2025 at 17:00 IST. Late submissions will not be entertained.",
+    "draft_claim": "Students can register anytime until December 2025 without any deadline restrictions.",
+    "expected_status": "contradiction",
+    "description": "Injected December registration deadline contradicting October 20 cutoff"
+  },
+  {
+    "id": "HAL-17",
+    "type": "entailment",
+    "context": "Probation / Internship Period: 6 Months stipend @ INR 35,000/- per month.",
+    "draft_claim": "The internship duration is 6 months with a monthly stipend of 35,000 INR.",
+    "expected_status": "entailment",
+    "description": "Accurate internship stipend statement"
+  },
+  {
+    "id": "HAL-18",
+    "type": "contradiction_injected",
+    "context": "Probation / Internship Period: 6 Months stipend @ INR 35,000/- per month.",
+    "draft_claim": "The internship is unpaid and candidates receive no stipend during the probation period.",
+    "expected_status": "contradiction",
+    "description": "Injected unpaid internship claim contradicting INR 35,000 stipend"
+  },
+  {
+    "id": "HAL-19",
+    "type": "entailment",
+    "context": "Maximum gap in academic study: 1 Year (duly justified).",
+    "draft_claim": "A maximum educational gap of one year is permissible if proper justification is provided.",
+    "expected_status": "entailment",
+    "description": "Accurate gap year policy"
+  },
+  {
+    "id": "HAL-20",
+    "type": "contradiction_injected",
+    "context": "Maximum gap in academic study: 1 Year (duly justified).",
+    "draft_claim": "Candidates may have unlimited gaps in study up to 10 years without any explanation.",
+    "expected_status": "contradiction",
+    "description": "Injected unlimited 10-year gap claim contradicting strict 1-year limit"
+  }
+]

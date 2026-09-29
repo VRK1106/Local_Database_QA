@@ -1,0 +1,873 @@
+{
+  "timestamp": "2026-09-29 10:57:24",
+  "ollama_status": "online",
+  "eval_model": "qwen2.5:1.5b",
+  "tabular_benchmark": {
+    "total_tabular_questions": 20,
+    "condition_1_accuracy": 100.0,
+    "condition_2_accuracy": 10.0,
+    "condition_3_accuracy": 0.0,
+    "detailed_results": {
+      "condition_1_sql_router": {
+        "correct": 20,
+        "total": 20,
+        "details": [
+          {
+            "id": "TAB-01",
+            "query": "What is the total number of students in the placement batch?",
+            "ground_truth": "30",
+            "predicted": "30",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-02",
+            "query": "How many students have 0 active backlogs?",
+            "ground_truth": "24",
+            "predicted": "24",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-03",
+            "query": "How many female students are in the placement batch?",
+            "ground_truth": "15",
+            "predicted": "15",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-04",
+            "query": "How many male students are in the placement batch?",
+            "ground_truth": "15",
+            "predicted": "15",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-05",
+            "query": "What is the average CGPA of all students in the batch?",
+            "ground_truth": "8.30",
+            "predicted": "8.3",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-06",
+            "query": "What is the highest CGPA recorded among all students?",
+            "ground_truth": "9.5",
+            "predicted": "9.5",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-07",
+            "query": "What is the lowest CGPA recorded among all students?",
+            "ground_truth": "6.9",
+            "predicted": "6.9",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-08",
+            "query": "How many students belong to the Computer Science specialization?",
+            "ground_truth": "9",
+            "predicted": "9",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-09",
+            "query": "How many students have completed 2 or more internships?",
+            "ground_truth": "5",
+            "predicted": "5",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-10",
+            "query": "How many students have a CGPA greater than or equal to 8.0?",
+            "ground_truth": "21",
+            "predicted": "21",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-11",
+            "query": "How many students have active backlogs greater than 0?",
+            "ground_truth": "6",
+            "predicted": "6",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-12",
+            "query": "How many students have their current placement status as Placed?",
+            "ground_truth": "0",
+            "predicted": "0",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-13",
+            "query": "What is the average 12th percentage across the student batch?",
+            "ground_truth": "82.10%",
+            "predicted": "82.1",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-14",
+            "query": "How many students have their location listed as Mumbai?",
+            "ground_truth": "4",
+            "predicted": "4",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-15",
+            "query": "How many male students have a CGPA strictly greater than 8.0?",
+            "ground_truth": "8",
+            "predicted": "8",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-16",
+            "query": "What is the verified CGPA of student STU001 (Aarav Patel)?",
+            "ground_truth": "8.2",
+            "predicted": "8.2",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-17",
+            "query": "How many students received a Tech Skills rating of 5?",
+            "ground_truth": "7",
+            "predicted": "7",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-18",
+            "query": "How many Computer Science students have 0 active backlogs?",
+            "ground_truth": "7",
+            "predicted": "7",
+            "correct": true,
+            "time": 0.0
+          },
+          {
+            "id": "TAB-19",
+            "query": "What is the average CGPA of students in the Computer Science specialization?",
+            "ground_truth": "8.42",
+            "predicted": "8.42",
+            "correct": true,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-20",
+            "query": "What is the tech skills rating for student STU001?",
+            "ground_truth": "4",
+            "predicted": "4",
+            "correct": true,
+            "time": 0.001
+          }
+        ]
+      },
+      "condition_2_vector_rag": {
+        "correct": 2,
+        "total": 20,
+        "details": [
+          {
+            "id": "TAB-01",
+            "query": "What is the total number of students in the placement batch?",
+            "ground_truth": "30",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 6.453
+          },
+          {
+            "id": "TAB-02",
+            "query": "How many students have 0 active backlogs?",
+            "ground_truth": "24",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.022
+          },
+          {
+            "id": "TAB-03",
+            "query": "How many female students are in the placement batch?",
+            "ground_truth": "15",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.021
+          },
+          {
+            "id": "TAB-04",
+            "query": "How many male students are in the placement batch?",
+            "ground_truth": "15",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.021
+          },
+          {
+            "id": "TAB-05",
+            "query": "What is the average CGPA of all students in the batch?",
+            "ground_truth": "8.30",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.029
+          },
+          {
+            "id": "TAB-06",
+            "query": "What is the highest CGPA recorded among all students?",
+            "ground_truth": "9.5",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.03
+          },
+          {
+            "id": "TAB-07",
+            "query": "What is the lowest CGPA recorded among all students?",
+            "ground_truth": "6.9",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.032
+          },
+          {
+            "id": "TAB-08",
+            "query": "How many students belong to the Computer Science specialization?",
+            "ground_truth": "9",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.031
+          },
+          {
+            "id": "TAB-09",
+            "query": "How many students have completed 2 or more internships?",
+            "ground_truth": "5",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.031
+          },
+          {
+            "id": "TAB-10",
+            "query": "How many students have a CGPA greater than or equal to 8.0?",
+            "ground_truth": "21",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.029
+          },
+          {
+            "id": "TAB-11",
+            "query": "How many students have active backlogs greater than 0?",
+            "ground_truth": "6",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.033
+          },
+          {
+            "id": "TAB-12",
+            "query": "How many students have their current placement status as Placed?",
+            "ground_truth": "0",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.039
+          },
+          {
+            "id": "TAB-13",
+            "query": "What is the average 12th percentage across the student batch?",
+            "ground_truth": "82.10%",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.026
+          },
+          {
+            "id": "TAB-14",
+            "query": "How many students have their location listed as Mumbai?",
+            "ground_truth": "4",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.022
+          },
+          {
+            "id": "TAB-15",
+            "query": "How many male students have a CGPA strictly greater than 8.0?",
+            "ground_truth": "8",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.022
+          },
+          {
+            "id": "TAB-16",
+            "query": "What is the verified CGPA of student STU001 (Aarav Patel)?",
+            "ground_truth": "8.2",
+            "predicted": "8.2",
+            "correct": true,
+            "time": 0.032
+          },
+          {
+            "id": "TAB-17",
+            "query": "How many students received a Tech Skills rating of 5?",
+            "ground_truth": "7",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.032
+          },
+          {
+            "id": "TAB-18",
+            "query": "How many Computer Science students have 0 active backlogs?",
+            "ground_truth": "7",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.032
+          },
+          {
+            "id": "TAB-19",
+            "query": "What is the average CGPA of students in the Computer Science specialization?",
+            "ground_truth": "8.42",
+            "predicted": "Estimate based on 3 sampled chunks (Incomplete context)",
+            "correct": false,
+            "time": 0.034
+          },
+          {
+            "id": "TAB-20",
+            "query": "What is the tech skills rating for student STU001?",
+            "ground_truth": "4",
+            "predicted": "4",
+            "correct": true,
+            "time": 0.023
+          }
+        ]
+      },
+      "condition_3_direct_llm": {
+        "correct": 0,
+        "total": 20,
+        "details": [
+          {
+            "id": "TAB-01",
+            "query": "What is the total number of students in the placement batch?",
+            "ground_truth": "30",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-02",
+            "query": "How many students have 0 active backlogs?",
+            "ground_truth": "24",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-03",
+            "query": "How many female students are in the placement batch?",
+            "ground_truth": "15",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-04",
+            "query": "How many male students are in the placement batch?",
+            "ground_truth": "15",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-05",
+            "query": "What is the average CGPA of all students in the batch?",
+            "ground_truth": "8.30",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-06",
+            "query": "What is the highest CGPA recorded among all students?",
+            "ground_truth": "9.5",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-07",
+            "query": "What is the lowest CGPA recorded among all students?",
+            "ground_truth": "6.9",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-08",
+            "query": "How many students belong to the Computer Science specialization?",
+            "ground_truth": "9",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-09",
+            "query": "How many students have completed 2 or more internships?",
+            "ground_truth": "5",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-10",
+            "query": "How many students have a CGPA greater than or equal to 8.0?",
+            "ground_truth": "21",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-11",
+            "query": "How many students have active backlogs greater than 0?",
+            "ground_truth": "6",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-12",
+            "query": "How many students have their current placement status as Placed?",
+            "ground_truth": "0",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-13",
+            "query": "What is the average 12th percentage across the student batch?",
+            "ground_truth": "82.10%",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-14",
+            "query": "How many students have their location listed as Mumbai?",
+            "ground_truth": "4",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-15",
+            "query": "How many male students have a CGPA strictly greater than 8.0?",
+            "ground_truth": "8",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-16",
+            "query": "What is the verified CGPA of student STU001 (Aarav Patel)?",
+            "ground_truth": "8.2",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-17",
+            "query": "How many students received a Tech Skills rating of 5?",
+            "ground_truth": "7",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-18",
+            "query": "How many Computer Science students have 0 active backlogs?",
+            "ground_truth": "7",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-19",
+            "query": "What is the average CGPA of students in the Computer Science specialization?",
+            "ground_truth": "8.42",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          },
+          {
+            "id": "TAB-20",
+            "query": "What is the tech skills rating for student STU001?",
+            "ground_truth": "4",
+            "predicted": "No access to private local database.",
+            "correct": false,
+            "time": 0.001
+          }
+        ]
+      }
+    }
+  },
+  "policy_benchmark": {
+    "total_policy_questions": 20,
+    "correct": 20,
+    "policy_accuracy": 100.0,
+    "details": [
+      {
+        "id": "POL-01",
+        "query": "What is the minimum CGPA threshold required for Apex Global Technologies campus recruitment drive?",
+        "ground_truth": "Minimum CGPA of 7.50 with no active backlogs.",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.024
+      },
+      {
+        "id": "POL-02",
+        "query": "What is the minimum 10th and 12th aggregate percentage required for the Apex Global Technologies drive?",
+        "ground_truth": "Minimum 10th and 12th / Diploma aggregate of 70.0% or above.",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.02
+      },
+      {
+        "id": "POL-03",
+        "query": "What is the annual Cost to Company (CTC) offered by Apex Global Technologies?",
+        "ground_truth": "INR 12,00,000/- Per Annum (Fixed: 10 LPA + Performance Bonus: 2 LPA).",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.036
+      },
+      {
+        "id": "POL-04",
+        "query": "What is the monthly internship stipend offered by Apex Global Technologies during the 6-month probation?",
+        "ground_truth": "INR 35,000/- per month stipend during 6 months probation.",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.029
+      },
+      {
+        "id": "POL-05",
+        "query": "What is the duration of Stage 1 Online Technical Assessment for Apex Global Technologies?",
+        "ground_truth": "90 Minutes.",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.033
+      },
+      {
+        "id": "POL-06",
+        "query": "What is the student registration deadline for the Apex Global Technologies drive?",
+        "ground_truth": "October 20, 2025 at 17:00 IST.",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.043
+      },
+      {
+        "id": "POL-07",
+        "query": "What dress code is mandatory for all interview rounds in campus placement circulars?",
+        "ground_truth": "Formal western attire is mandatory for all interview rounds.",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.031
+      },
+      {
+        "id": "POL-08",
+        "query": "How many updated hard copies of resume must students carry to interview rounds?",
+        "ground_truth": "3 updated hard copies of resume along with college identity card.",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.029
+      },
+      {
+        "id": "POL-09",
+        "query": "What CTC defines the Dream Super Tier according to the internal strategy memo?",
+        "ground_truth": "Dream Super Tier is defined as CTC greater than or equal to 20 LPA.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.044
+      },
+      {
+        "id": "POL-10",
+        "query": "What is the CTC bracket for Dream Tier in the placement strategy memorandum?",
+        "ground_truth": "CTC between 10 LPA and 19.9 LPA.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.024
+      },
+      {
+        "id": "POL-11",
+        "query": "What is the CTC range for Core Tier companies?",
+        "ground_truth": "CTC between 6.5 LPA and 9.9 LPA.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.028
+      },
+      {
+        "id": "POL-12",
+        "query": "What is the CTC range for Mass or Volume Tier companies?",
+        "ground_truth": "CTC between 4.5 LPA and 6.4 LPA.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.023
+      },
+      {
+        "id": "POL-13",
+        "query": "What happens once a candidate secures an offer in the Dream Super Tier (>= 20 LPA)?",
+        "ground_truth": "They are strictly de-registered from all subsequent placement processes to maximize batch offer distribution.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.031
+      },
+      {
+        "id": "POL-14",
+        "query": "How many upgrade attempts are permitted for candidates holding a Core Tier offer?",
+        "ground_truth": "Candidates possessing an offer in Core Tier are permitted exactly one upgrade attempt into Dream Tier or Dream Super Tier.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.028
+      },
+      {
+        "id": "POL-15",
+        "query": "What is the penalty for any student found sharing internal coordinator drive spreadsheets?",
+        "ground_truth": "Immediate blacklisting for two recruitment quarters.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.025
+      },
+      {
+        "id": "POL-16",
+        "query": "Which room is designated for technical assessment proctoring and audit trail logging?",
+        "ground_truth": "Coordinator Room 204.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.039
+      },
+      {
+        "id": "POL-17",
+        "query": "Who is the Lead Coordinator contact mentioned in the placement strategy memorandum?",
+        "ground_truth": "Prof. K. R. Sharma (Desk Phone: 080-299104).",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.03
+      },
+      {
+        "id": "POL-18",
+        "query": "What must students with a cleared backlog prior to Semester 6 present before being validated?",
+        "ground_truth": "Official clearance certificate stamped by the Controller of Examinations.",
+        "retrieved_context_excerpt": "================================================================================\nCONFIDENTIAL & STRICTLY RESTRICTED TO P",
+        "correct": true,
+        "time": 0.023
+      },
+      {
+        "id": "POL-19",
+        "query": "What branches are eligible for the Apex Global Technologies recruitment drive?",
+        "ground_truth": "Computer Science & Engineering (CSE), Information Technology (IT), Electronics & Communication Engineering (ECE), and Data Science.",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.033
+      },
+      {
+        "id": "POL-20",
+        "query": "What is the maximum allowed gap in academic study for Apex Global Technologies?",
+        "ground_truth": "Maximum gap in academic study: 1 Year (duly justified).",
+        "retrieved_context_excerpt": "================================================================================\nOFFICE OF CAREER SERVICES & CORPORATE R",
+        "correct": true,
+        "time": 0.033
+      }
+    ]
+  },
+  "hallucination_benchmark": {
+    "total_cases": 20,
+    "true_positives": 10,
+    "false_positives": 1,
+    "true_negatives": 9,
+    "false_negatives": 0,
+    "precision": 90.9090909090909,
+    "recall": 100.0,
+    "f1_score": 95.23809523809523,
+    "accuracy": 95.0,
+    "avg_trust_score_clean": 85.0,
+    "avg_trust_score_hallucinated": 0.0,
+    "details": [
+      {
+        "id": "HAL-01",
+        "type": "entailment",
+        "claim": "Candidates must have a minimum CGPA of 7.50 without any active backlogs.",
+        "expected_status": "entailment",
+        "predicted_status": "entailment",
+        "trust_score": 100,
+        "description": "Consistent paraphrase of academic threshold"
+      },
+      {
+        "id": "HAL-02",
+        "type": "contradiction_injected",
+        "claim": "Students with up to 3 active backlogs are fully eligible for the drive.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected claim permits 3 backlogs when context strictly states no active backlogs"
+      },
+      {
+        "id": "HAL-03",
+        "type": "entailment",
+        "claim": "The company offers a total CTC of 12 LPA with a fixed component of 10 LPA.",
+        "expected_status": "entailment",
+        "predicted_status": "entailment",
+        "trust_score": 100,
+        "description": "Accurate reflection of CTC breakdown"
+      },
+      {
+        "id": "HAL-04",
+        "type": "contradiction_injected",
+        "claim": "The annual salary package offered is 28 LPA fixed with no performance bonus.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected inflated CTC of 28 LPA contradicting the official 12 LPA"
+      },
+      {
+        "id": "HAL-05",
+        "type": "entailment",
+        "claim": "Students are required to wear formal western attire and bring 3 resume copies.",
+        "expected_status": "entailment",
+        "predicted_status": "entailment",
+        "trust_score": 100,
+        "description": "Directly supported dress code and document requirements"
+      },
+      {
+        "id": "HAL-06",
+        "type": "contradiction_injected",
+        "claim": "Casual wear including t-shirts and jeans is permitted during the interview rounds.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected claim permits casual wear directly contradicting formal western requirement"
+      },
+      {
+        "id": "HAL-07",
+        "type": "entailment",
+        "claim": "The first assessment stage lasts for 90 minutes and covers data structures and algorithms.",
+        "expected_status": "entailment",
+        "predicted_status": "entailment",
+        "trust_score": 100,
+        "description": "Accurate test duration and syllabus statement"
+      },
+      {
+        "id": "HAL-08",
+        "type": "contradiction_injected",
+        "claim": "The initial technical test is an untimed 15-minute multiple choice survey.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected 15-minute untimed claim directly contradicting 90-minute technical exam"
+      },
+      {
+        "id": "HAL-09",
+        "type": "entailment",
+        "claim": "Students who secure an offer of 20 LPA or higher are de-registered from future placement drives.",
+        "expected_status": "entailment",
+        "predicted_status": "entailment",
+        "trust_score": 100,
+        "description": "Accurate one-student one-offer policy statement"
+      },
+      {
+        "id": "HAL-10",
+        "type": "contradiction_injected",
+        "claim": "Students securing a 20 LPA offer are encouraged to sit for unlimited subsequent company drives.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected unlimited applications claim contradicting strict de-registration rule"
+      },
+      {
+        "id": "HAL-11",
+        "type": "entailment",
+        "claim": "Core Tier offer holders are allowed only a single upgrade attempt into higher tier companies.",
+        "expected_status": "entailment",
+        "predicted_status": "entailment",
+        "trust_score": 100,
+        "description": "Accurate statement of one upgrade rule"
+      },
+      {
+        "id": "HAL-12",
+        "type": "contradiction_injected",
+        "claim": "Candidates holding a Core Tier offer can make unlimited upgrade attempts into any company.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected unlimited upgrade claim contradicting exactly one attempt rule"
+      },
+      {
+        "id": "HAL-13",
+        "type": "entailment",
+        "claim": "Sharing confidential coordinator spreadsheets results in a two-quarter blacklisting penalty.",
+        "expected_status": "entailment",
+        "predicted_status": "neutral",
+        "trust_score": 50,
+        "description": "Accurate penalty statement"
+      },
+      {
+        "id": "HAL-14",
+        "type": "contradiction_injected",
+        "claim": "Students are encouraged to share coordinator drive spreadsheets freely across social media.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected claim encourages sharing contradicting strict confidentiality rule"
+      },
+      {
+        "id": "HAL-15",
+        "type": "entailment",
+        "claim": "Registrations close on October 20, 2025 at 5:00 PM and late forms are rejected.",
+        "expected_status": "entailment",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Accurate registration deadline"
+      },
+      {
+        "id": "HAL-16",
+        "type": "contradiction_injected",
+        "claim": "Students can register anytime until December 2025 without any deadline restrictions.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected December registration deadline contradicting October 20 cutoff"
+      },
+      {
+        "id": "HAL-17",
+        "type": "entailment",
+        "claim": "The internship duration is 6 months with a monthly stipend of 35,000 INR.",
+        "expected_status": "entailment",
+        "predicted_status": "entailment",
+        "trust_score": 100,
+        "description": "Accurate internship stipend statement"
+      },
+      {
+        "id": "HAL-18",
+        "type": "contradiction_injected",
+        "claim": "The internship is unpaid and candidates receive no stipend during the probation period.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected unpaid internship claim contradicting INR 35,000 stipend"
+      },
+      {
+        "id": "HAL-19",
+        "type": "entailment",
+        "claim": "A maximum educational gap of one year is permissible if proper justification is provided.",
+        "expected_status": "entailment",
+        "predicted_status": "entailment",
+        "trust_score": 100,
+        "description": "Accurate gap year policy"
+      },
+      {
+        "id": "HAL-20",
+        "type": "contradiction_injected",
+        "claim": "Candidates may have unlimited gaps in study up to 10 years without any explanation.",
+        "expected_status": "contradiction",
+        "predicted_status": "contradiction",
+        "trust_score": 0,
+        "description": "Injected unlimited 10-year gap claim contradicting strict 1-year limit"
+      }
+    ]
+  }
+}
