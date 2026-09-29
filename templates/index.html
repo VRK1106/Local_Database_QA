@@ -188,6 +188,88 @@
         background: rgba(15, 23, 42, 0.85);
     }
 
+    /* Target Document Scope Bar & Multi-File Chips */
+    .document-scope-bar {
+        margin-bottom: 12px;
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-md);
+        padding: 10px 14px;
+        backdrop-filter: blur(8px);
+        transition: border-color 0.2s ease;
+    }
+    .document-scope-bar:hover {
+        border-color: rgba(6, 182, 212, 0.3);
+    }
+    .scope-action-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--bg-card-border);
+        color: #cbd5e1;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 3px 9px;
+        border-radius: 4px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        transition: all 0.2s ease;
+    }
+    .scope-action-btn:hover {
+        background: rgba(6, 182, 212, 0.15);
+        color: var(--accent-cyan);
+        border-color: rgba(6, 182, 212, 0.3);
+    }
+    .scope-action-btn.active {
+        background: rgba(6, 182, 212, 0.2);
+        color: var(--accent-cyan);
+        border-color: var(--accent-cyan);
+    }
+    .scope-doc-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--bg-card-border);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 11.5px;
+        color: #e2e8f0;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.2s ease;
+    }
+    .scope-doc-chip:hover {
+        background: rgba(255, 255, 255, 0.07);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+    .scope-doc-chip.selected {
+        background: rgba(6, 182, 212, 0.15);
+        border-color: rgba(6, 182, 212, 0.4);
+        color: #fff;
+    }
+    .scope-doc-chip input[type="checkbox"] {
+        accent-color: var(--accent-cyan);
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+    }
+    .chip-vis {
+        font-size: 9px;
+        font-family: monospace;
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-weight: 600;
+    }
+    .chip-vis.vis-public {
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--accent-emerald);
+    }
+    .chip-vis.vis-internal {
+        background: rgba(244, 63, 94, 0.2);
+        color: var(--accent-rose);
+    }
+
     .query-bottom-bar {
         display: flex;
         align-items: center;
@@ -889,6 +971,39 @@
                 {% endif %}
             </div>
 
+            <!-- Target Document Scope Selector (Single or Multi-File Querying) -->
+            <div class="document-scope-bar" id="document-scope-bar">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #cbd5e1;">
+                        <i class="fa-solid fa-folder-tree" style="color: var(--accent-cyan);"></i> Target Documents:
+                        <span id="scope-status-label" style="font-size: 11px; color: var(--accent-emerald); font-weight: 500;">All Files (Global Cross-Doc QA)</span>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button type="button" id="btn-select-all-docs" class="scope-action-btn active" onclick="selectAllScopeDocs()" title="Query across all database documents simultaneously">
+                            <i class="fa-solid fa-globe"></i> All Files
+                        </button>
+                        <button type="button" id="btn-clear-docs" class="scope-action-btn" onclick="clearAllScopeDocs()" title="Clear selection">
+                            <i class="fa-solid fa-xmark"></i> Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="scope-chips-list" style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto;">
+                    {% if accessible_documents %}
+                        {% for doc in accessible_documents %}
+                        <label class="scope-doc-chip" title="Click to filter {{ doc.name }}">
+                            <input type="checkbox" name="sources" value="{{ doc.name }}" class="doc-source-checkbox" onchange="onScopeDocChange()" {% if doc.name in selected_sources %}checked{% endif %}>
+                            <i class="fa-solid {% if doc.name.endswith('.xlsx') or doc.name.endswith('.csv') %}fa-file-excel{% elif doc.name.endswith('.pdf') %}fa-file-pdf{% else %}fa-file-lines{% endif %}"></i>
+                            <span class="chip-filename">{{ doc.name }}</span>
+                            <span class="chip-vis {% if doc.visibility == 'public' %}vis-public{% else %}vis-internal{% endif %}">{{ doc.visibility|upper }}</span>
+                        </label>
+                        {% endfor %}
+                    {% else %}
+                        <span style="font-size: 11px; color: var(--text-muted); font-style: italic;">No uploaded documents found.</span>
+                    {% endif %}
+                </div>
+            </div>
+
             <!-- Unified Interactive Prompt Input -->
             <div class="query-input-wrapper">
                 <textarea name="q" id="query-input" class="query-textarea" placeholder="Ask any question about your local database documents, circulars, or placement criteria..." required>{{ query }}</textarea>
@@ -921,9 +1036,12 @@
                     <i class="fa-solid fa-wand-magic-sparkles"></i> 
                     <span id="card-mode-title">{% if mode == 'rag' %}RAG Answer from Local Database{% elif mode == 'direct' %}Direct Ollama Response{% else %}Vector Retrieval Matches{% endif %}</span>
                 </div>
-                <span class="status-badge online">
-                    <i class="fa-solid fa-microchip"></i> <span id="active-model-name">{{ selected_model }}</span>
-                </span>
+                <div style="display: flex; align-items: center; gap: 8px;" id="answer-header-badges">
+                    <span id="trust-badge-container"></span>
+                    <span class="status-badge online">
+                        <i class="fa-solid fa-microchip"></i> <span id="active-model-name">{{ selected_model }}</span>
+                    </span>
+                </div>
             </div>
 
             <div class="answer-body" id="answer-text">
@@ -1385,6 +1503,10 @@
         if (oldTrustBadge) {
             oldTrustBadge.remove();
         }
+        const trustBadgeContainer = document.getElementById('trust-badge-container');
+        if (trustBadgeContainer) {
+            trustBadgeContainer.innerHTML = '';
+        }
 
         if (activeModelSpan) {
             activeModelSpan.textContent = model;
@@ -1439,13 +1561,12 @@
                             
                             // Context Citations Event
                             if (data.type === 'context') {
+                                currentContextTexts = data.context_texts || (data.citations ? data.citations.map(c => c.text) : []);
                                 {% if current_user.is_student %}
                                 // Students do not receive or view citations
                                 if (citationsContainer) citationsContainer.style.display = "none";
                                 {% else %}
                                 if (data.citations && data.citations.length > 0) {
-                                    currentContextTexts = data.citations.map(c => c.text);
-                                    
                                     // Group unique sources and their pages for clean hyperlink badges
                                     const sourceMap = {};
                                     data.citations.forEach(c => {
@@ -1501,45 +1622,7 @@
                             
                             // Verification Event
                             if (data.type === 'verification') {
-                                const res = data.result;
-                                const score = res.score;
-                                const claims = res.claims;
-                                
-                                let badgeClass = "offline";
-                                let badgeIcon = "fa-triangle-exclamation";
-                                if (score > 90) {
-                                    badgeClass = "online";
-                                    badgeIcon = "fa-shield-check";
-                                } else if (score >= 60) {
-                                    badgeClass = "warning";
-                                    badgeIcon = "fa-shield-halved";
-                                }
-                                
-                                const modelSpan = document.getElementById('active-model-name');
-                                if (modelSpan) {
-                                    modelSpan.parentElement.outerHTML = `
-                                    <span class="status-badge ${badgeClass}" style="margin-right:8px;" title="Hallucination Check Score">
-                                        <i class="fa-solid ${badgeIcon}"></i> Trust Score: ${score}%
-                                    </span>
-                                    <span class="status-badge online">
-                                        <i class="fa-solid fa-microchip"></i> <span id="active-model-name">${document.getElementById('model-select').value}</span>
-                                    </span>`;
-                                }
-
-                                // Replace answer text with highlighted claims
-                                let highlightedHTML = "";
-                                for (let claim of claims) {
-                                    if (claim.status === 'entailment') {
-                                        highlightedHTML += `<span style="background-color: rgba(16, 185, 129, 0.15); border-bottom: 2px solid rgba(16, 185, 129, 0.5); border-radius: 2px;">${claim.text}</span> `;
-                                    } else if (claim.status === 'contradiction') {
-                                        highlightedHTML += `<span style="background-color: rgba(239, 68, 68, 0.15); border-bottom: 2px solid rgba(239, 68, 68, 0.5); border-radius: 2px;" title="Hallucination Detected">${claim.text}</span> `;
-                                    } else {
-                                        highlightedHTML += `<span style="background-color: rgba(245, 158, 11, 0.15); border-bottom: 2px solid rgba(245, 158, 11, 0.5); border-radius: 2px;" title="Unverified External Knowledge">${claim.text}</span> `;
-                                    }
-                                }
-                                if (highlightedHTML) {
-                                    answerTextDiv.innerHTML = highlightedHTML + '<span class="cursor-blink"></span>';
-                                }
+                                renderTrustScoreBadge(data.result);
                             }
 
                             if (data.error) {
@@ -1574,21 +1657,12 @@
             }
             
             // Kick off background Trust Layer Verification
-            const trustEnabled = document.getElementById('trust-checkbox')?.checked;
+            const trustEnabled = document.getElementById('trust-checkbox') ? document.getElementById('trust-checkbox').checked : true;
             if (mode === 'rag' && currentContextTexts.length > 0 && trustEnabled) {
-                const isSqlExecution = currentContextTexts[0].startsWith("Universal Structured Execution");
+                const isSqlExecution = currentContextTexts[0] && (currentContextTexts[0].includes("Structured Execution") || currentContextTexts[0].includes("Universal Structured Execution"));
                 
                 if (isSqlExecution) {
-                    const modelSpan = document.getElementById('active-model-name');
-                    if (modelSpan) {
-                        modelSpan.parentElement.outerHTML = `
-                        <span class="status-badge online" style="margin-right:8px;" id="trust-badge" title="Mathematically executed directly on database schema">
-                            <i class="fa-solid fa-database"></i> DB Verified: 100%
-                        </span>
-                        <span class="status-badge online">
-                            <i class="fa-solid fa-microchip"></i> <span id="active-model-name">${model}</span>
-                        </span>`;
-                    }
+                    renderTrustScoreBadge({ score: 100, mode: 'sql' });
                 } else {
                     fetchTrustScore(accumulatedMarkdown, currentContextTexts, model);
                 }
@@ -1604,16 +1678,75 @@
         }
     }
 
-    async function fetchTrustScore(answer, contextTexts, model) {
-        const modelSpan = document.getElementById('active-model-name');
-        if (modelSpan) {
-            modelSpan.parentElement.outerHTML = `
-            <span class="status-badge warning" style="margin-right:8px;" id="trust-badge">
-                <i class="fa-solid fa-spinner fa-spin"></i> Verifying...
-            </span>
-            <span class="status-badge online">
-                <i class="fa-solid fa-microchip"></i> <span id="active-model-name">${model}</span>
+    function renderTrustScoreBadge(res) {
+        const container = document.getElementById('trust-badge-container');
+        if (!container) return;
+
+        if (res.mode === 'sql') {
+            container.innerHTML = `
+                <span class="status-badge online" id="trust-badge" title="Mathematically calculated via SQLite">
+                    <i class="fa-solid fa-database"></i> DB Verified: 100% (Mathematical SQL)
+                </span>`;
+            return;
+        }
+
+        const score = res.score !== undefined ? res.score : 100;
+        let badgeClass = "offline";
+        let badgeIcon = "fa-triangle-exclamation";
+        let label = "Contradiction Flagged";
+
+        if (score >= 85) {
+            badgeClass = "online";
+            badgeIcon = "fa-shield-check";
+            label = "High Trust";
+        } else if (score >= 60) {
+            badgeClass = "warning";
+            badgeIcon = "fa-shield-halved";
+            label = "Moderate Trust";
+        }
+
+        container.innerHTML = `
+            <span class="status-badge ${badgeClass}" id="trust-badge" title="NLI Cross-Encoder Verification Score">
+                <i class="fa-solid ${badgeIcon}"></i> Trust Score: ${score}% (${label})
             </span>`;
+
+        // If claims exist and have contradictions or neutral statements, highlight them
+        if (res.claims && res.claims.length > 0) {
+            const hasContradiction = res.claims.some(c => c.status === 'contradiction');
+            let alertHTML = "";
+            if (hasContradiction) {
+                alertHTML = `
+                    <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; color: #fca5a5; display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-triangle-exclamation" style="color: var(--accent-rose); font-size: 16px;"></i>
+                        <span><strong>Hallucination Alert:</strong> One or more statements highlighted below contradict official placement documents.</span>
+                    </div>`;
+            }
+
+            let highlightedHTML = "";
+            for (let claim of res.claims) {
+                if (claim.status === 'entailment') {
+                    highlightedHTML += `<span style="background-color: rgba(16, 185, 129, 0.12); border-bottom: 2px solid rgba(16, 185, 129, 0.6); border-radius: 2px;">${claim.text}</span> `;
+                } else if (claim.status === 'contradiction') {
+                    highlightedHTML += `<span style="background-color: rgba(239, 68, 68, 0.18); border-bottom: 2px solid rgba(239, 68, 68, 0.8); border-radius: 2px; font-weight: 500;" title="Contradicts official document facts">${claim.text}</span> `;
+                } else {
+                    highlightedHTML += `<span style="background-color: rgba(245, 158, 11, 0.12); border-bottom: 2px solid rgba(245, 158, 11, 0.5); border-radius: 2px;" title="Unverified External Knowledge">${claim.text}</span> `;
+                }
+            }
+
+            const answerTextDiv = document.getElementById('answer-text');
+            if (answerTextDiv && (alertHTML || highlightedHTML)) {
+                answerTextDiv.innerHTML = alertHTML + (highlightedHTML || answerTextDiv.innerHTML);
+            }
+        }
+    }
+
+    async function fetchTrustScore(answer, contextTexts, model) {
+        const container = document.getElementById('trust-badge-container');
+        if (container) {
+            container.innerHTML = `
+                <span class="status-badge warning" id="trust-badge">
+                    <i class="fa-solid fa-spinner fa-spin"></i> Verifying Claims...
+                </span>`;
         }
 
         try {
@@ -1623,50 +1756,69 @@
                 body: JSON.stringify({ answer: answer, context_texts: contextTexts })
             });
             const res = await response.json();
-            
-            const score = res.score;
-            const claims = res.claims;
-            
-            let badgeClass = "offline";
-            let badgeIcon = "fa-triangle-exclamation";
-            if (score > 90) {
-                badgeClass = "online";
-                badgeIcon = "fa-shield-check";
-            } else if (score >= 60) {
-                badgeClass = "warning";
-                badgeIcon = "fa-shield-halved";
-            }
-            
-            const trustBadge = document.getElementById('trust-badge');
-            if (trustBadge) {
-                trustBadge.className = `status-badge ${badgeClass}`;
-                trustBadge.title = "Hallucination Check Score";
-                trustBadge.innerHTML = `<i class="fa-solid ${badgeIcon}"></i> Trust Score: ${score}%`;
-            }
-
-            // Replace answer text with highlighted claims
-            let highlightedHTML = "";
-            for (let claim of claims) {
-                if (claim.status === 'entailment') {
-                    highlightedHTML += `<span style="background-color: rgba(16, 185, 129, 0.15); border-bottom: 2px solid rgba(16, 185, 129, 0.5); border-radius: 2px;">${claim.text}</span> `;
-                } else if (claim.status === 'contradiction') {
-                    highlightedHTML += `<span style="background-color: rgba(239, 68, 68, 0.15); border-bottom: 2px solid rgba(239, 68, 68, 0.5); border-radius: 2px;" title="Hallucination Detected">${claim.text}</span> `;
-                } else {
-                    highlightedHTML += `<span style="background-color: rgba(245, 158, 11, 0.15); border-bottom: 2px solid rgba(245, 158, 11, 0.5); border-radius: 2px;" title="Unverified External Knowledge">${claim.text}</span> `;
-                }
-            }
-            
-            const answerTextDiv = document.getElementById('answer-text');
-            if (highlightedHTML && answerTextDiv) {
-                answerTextDiv.innerHTML = highlightedHTML;
-            }
-
+            renderTrustScoreBadge(res);
         } catch (err) {
             console.error("Trust Layer verification failed:", err);
-            const trustBadge = document.getElementById('trust-badge');
-            if (trustBadge) {
-                trustBadge.style.display = 'none';
+            if (container) {
+                container.innerHTML = '';
             }
+        }
+    }
+
+    // Target Document Scope Selector Helper Functions
+    function selectAllScopeDocs() {
+        document.querySelectorAll('.doc-source-checkbox').forEach(cb => {
+            cb.checked = false;
+            cb.closest('.scope-doc-chip')?.classList.remove('selected');
+        });
+        document.getElementById('btn-select-all-docs')?.classList.add('active');
+        updateScopeStatusLabel();
+    }
+
+    function clearAllScopeDocs() {
+        document.querySelectorAll('.doc-source-checkbox').forEach(cb => {
+            cb.checked = false;
+            cb.closest('.scope-doc-chip')?.classList.remove('selected');
+        });
+        document.getElementById('btn-select-all-docs')?.classList.remove('active');
+        updateScopeStatusLabel();
+    }
+
+    function onScopeDocChange() {
+        let anyChecked = false;
+        document.querySelectorAll('.doc-source-checkbox').forEach(cb => {
+            if (cb.checked) {
+                anyChecked = true;
+                cb.closest('.scope-doc-chip')?.classList.add('selected');
+            } else {
+                cb.closest('.scope-doc-chip')?.classList.remove('selected');
+            }
+        });
+
+        const allBtn = document.getElementById('btn-select-all-docs');
+        if (allBtn) {
+            if (!anyChecked) {
+                allBtn.classList.add('active');
+            } else {
+                allBtn.classList.remove('active');
+            }
+        }
+        updateScopeStatusLabel();
+    }
+
+    function updateScopeStatusLabel() {
+        const label = document.getElementById('scope-status-label');
+        if (!label) return;
+        const checked = Array.from(document.querySelectorAll('.doc-source-checkbox:checked'));
+        if (checked.length === 0) {
+            label.textContent = "All Files (Global Cross-Doc QA)";
+            label.style.color = "var(--accent-emerald)";
+        } else if (checked.length === 1) {
+            label.textContent = `1 File Focused: ${checked[0].value}`;
+            label.style.color = "var(--accent-cyan)";
+        } else {
+            label.textContent = `${checked.length} Files Selected (Multi-File Cross-Doc QA)`;
+            label.style.color = "var(--accent-purple)";
         }
     }
 

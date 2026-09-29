@@ -82,7 +82,11 @@ def build_rag_prompt(question: str, context_chunks: list[dict]) -> str:
         context_str += f"[Source {idx}: {source}, Page {page}]\n{text}\n\n"
 
     prompt = (
-        f"You are a strict, precise document QA assistant. Extract exact facts from the provided database text.\n\n"
+        f"You are a strict, authoritative University Placement & Academic QA assistant.\n"
+        f"CRITICAL GROUNDING RULES:\n"
+        f"1. Answer strictly using ONLY the explicit facts and numbers provided in the database text below.\n"
+        f"2. If an exact figure, salary/CTC, deadline, eligibility threshold, or policy is NOT explicitly stated, state clearly: 'This information is not specified in the official placement records provided.'\n"
+        f"3. DO NOT extrapolate, guess, or apply external industry assumptions.\n\n"
         f"GRADING SCALE REFERENCE (for academic transcripts):\n"
         f"- 'O' = Outstanding (10 Points, HIGHEST grade, NOT zero or lowest)\n"
         f"- 'A+' = Excellent (9 Points)\n"
@@ -93,7 +97,7 @@ def build_rag_prompt(question: str, context_chunks: list[dict]) -> str:
         f"- 'F' / 'U' / 'RA' = Reappear / Fail (0 Points, LOWEST grade)\n\n"
         f"DATABASE TEXT:\n{context_str.strip()}\n\n"
         f"QUESTION: {question}\n\n"
-        f"INSTRUCTION: Extract the exact answer, grade, code, or result directly from the database text above according to the grading scale reference. Be concise and precise.\n\n"
+        f"INSTRUCTION: Extract the exact answer, grade, criterion, or policy directly from the database text above. Be concise, objective, and precise.\n\n"
         f"ANSWER:"
     )
     return prompt
