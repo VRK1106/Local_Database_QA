@@ -405,6 +405,37 @@
         overflow-wrap: break-word !important;
     }
 
+    .citation-file-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--bg-card-border);
+        border-radius: var(--radius-md);
+        color: var(--text-main);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .citation-file-badge:hover {
+        background: rgba(6, 182, 212, 0.12);
+        border-color: var(--accent-cyan);
+        color: var(--accent-cyan);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(6, 182, 212, 0.15);
+    }
+
+    .citation-file-badge .file-pages {
+        font-size: 11px;
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 2px 7px;
+        border-radius: 4px;
+    }
+
     /* Options Panel (Right Column) */
     .options-panel {
         width: 100%;
@@ -756,22 +787,24 @@
             <div class="student-kpi-grid">
                 <div class="kpi-mini-card">
                     <span class="kpi-label"><i class="fa-solid fa-chart-line" style="color: var(--accent-cyan);"></i> Verified CGPA</span>
-                    <div class="kpi-value cyan">{{ student_record.get('CGPA', '—') if student_record else '—' }}</div>
+                    <div class="kpi-value cyan">{{ student_record.get('cgpa') or student_record.get('CGPA') or '—' if student_record else '—' }}</div>
                     <span class="kpi-foot">Scale: 10.0</span>
                 </div>
                 <div class="kpi-mini-card">
                     <span class="kpi-label"><i class="fa-solid fa-code-branch" style="color: var(--accent-purple);"></i> Department</span>
-                    <div class="kpi-value white" title="{{ student_record.get('Branch', '—') if student_record else '—' }}">{{ student_record.get('Branch', 'General') if student_record else 'General' }}</div>
+                    <div class="kpi-value white" title="{{ student_record.get('specialization') or student_record.get('Branch') or student_record.get('Department') or 'General' if student_record else 'General' }}">{{ student_record.get('specialization') or student_record.get('Branch') or student_record.get('Department') or 'General' if student_record else 'General' }}</div>
                     <span class="kpi-foot">Academic Branch</span>
                 </div>
                 <div class="kpi-mini-card">
-                    <span class="kpi-label"><i class="fa-solid fa-circle-exclamation" style="color: {% if student_record and student_record.get('Backlogs', 0)|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %};"></i> Active Backlogs</span>
-                    <div class="kpi-value {% if student_record and student_record.get('Backlogs', 0)|int > 0 %}rose{% else %}emerald{% endif %}">{{ student_record.get('Backlogs', 0) if student_record else 0 }}</div>
-                    <span class="kpi-foot">{% if student_record and student_record.get('Backlogs', 0)|int == 0 %}Clear Record{% else %}Requires Clearing{% endif %}</span>
+                    {% set cur_backlogs = student_record.get('backlogs', student_record.get('Backlogs', 0)) if student_record else 0 %}
+                    <span class="kpi-label"><i class="fa-solid fa-circle-exclamation" style="color: {% if cur_backlogs|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %};"></i> Active Backlogs</span>
+                    <div class="kpi-value {% if cur_backlogs|int > 0 %}rose{% else %}emerald{% endif %}">{{ cur_backlogs }}</div>
+                    <span class="kpi-foot">{% if cur_backlogs|int == 0 %}Clear Record{% else %}Requires Clearing{% endif %}</span>
                 </div>
                 <div class="kpi-mini-card">
+                    {% set cur_status = student_record.get('placed_company') or student_record.get('Placed_Company') or student_record.get('placement_status') or 'Eligible' if student_record else 'Eligible' %}
                     <span class="kpi-label"><i class="fa-solid fa-trophy" style="color: var(--accent-amber);"></i> Drive Status</span>
-                    <div class="kpi-value amber" style="font-size: 13.5px;">{{ student_record.get('Placed_Company', 'Eligible') if student_record and student_record.get('Placed_Company') and student_record.get('Placed_Company') not in ['No', 'None', '-'] else 'Eligible' }}</div>
+                    <div class="kpi-value amber" style="font-size: 13.5px;">{{ cur_status if cur_status not in ['No', 'None', '-'] else 'Eligible' }}</div>
                     <span class="kpi-foot">Campus Recruitment</span>
                 </div>
             </div>
@@ -910,31 +943,33 @@
             </div>
         </div>
 
-        <!-- Retrieved Source Citation Cards Container -->
+        {% if not current_user.is_student %}
+        <!-- Source Document References (Placement Officers / Admins) -->
         <div class="glass-card" id="citations-container" style="display: {% if results %}block{% else %}none{% endif %};">
-            <div class="panel-title">
-                <i class="fa-solid fa-quote-left"></i> Retrieved Database Citations (<span id="citation-count">{{ results|length if results else 0 }}</span> Passages)
+            <div class="panel-title" style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600;">
+                    <i class="fa-solid fa-paperclip" style="color: var(--accent-cyan);"></i> Source Documents Cited (<span id="citation-count">{{ results|length if results else 0 }}</span>)
+                </span>
             </div>
 
-            <div id="citation-list">
+            <div id="citation-list" style="display: flex; flex-wrap: wrap; gap: 10px;">
                 {% if results %}
+                    {% set seen_sources = [] %}
                     {% for hit in results %}
-                        <div class="citation-card">
-                            <div class="citation-header">
-                                <div>
-                                    <i class="fa-solid fa-file-lines" style="color: var(--accent-cyan);"></i> 
-                                    <strong>{{ hit.source }}</strong> (Page {{ hit.page }})
-                                </div>
-                                <span class="citation-score">Relevance: {{ (hit.score * 100)|round(1) }}%</span>
-                            </div>
-                            <div class="citation-text">
-                                "{{ hit.text }}"
-                            </div>
-                        </div>
+                        {% if hit.source not in seen_sources %}
+                            {% set _ = seen_sources.append(hit.source) %}
+                            <a href="{{ url_for('view_document_file', filename=hit.source) }}" target="_blank" class="citation-file-badge" title="Open source file {{ hit.source }}">
+                                <i class="fa-solid {% if hit.source.endswith('.pdf') %}fa-file-pdf{% elif hit.source.endswith('.csv') or hit.source.endswith('.xlsx') %}fa-file-excel{% else %}fa-file-lines{% endif %}" style="color: var(--accent-cyan);"></i>
+                                <strong>{{ hit.source }}</strong>
+                                {% if hit.page %}<span class="file-pages">Page {{ hit.page }}</span>{% endif %}
+                                <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 10px; opacity: 0.7;"></i>
+                            </a>
+                        {% endif %}
                     {% endfor %}
                 {% endif %}
             </div>
         </div>
+        {% endif %}
     </div>
 
     {% if current_user.is_developer %}
@@ -1124,22 +1159,24 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11.5px;">
                     <div style="background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px;">
                         <span style="color: var(--text-muted); font-size: 10px; display: block;">CGPA</span>
-                        <strong style="color: var(--accent-cyan); font-size: 14px;">{{ student_record.get('CGPA', '—') }}</strong>
+                        <strong style="color: var(--accent-cyan); font-size: 14px;">{{ student_record.get('cgpa') or student_record.get('CGPA') or '—' }}</strong>
                     </div>
                     <div style="background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px;">
                         <span style="color: var(--text-muted); font-size: 10px; display: block;">Branch</span>
-                        <strong style="color: #fff; font-size: 12px;">{{ student_record.get('Branch', '—') }}</strong>
+                        <strong style="color: #fff; font-size: 12px;">{{ student_record.get('specialization') or student_record.get('Branch') or student_record.get('Department') or '—' }}</strong>
                     </div>
                     <div style="background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px;">
                         <span style="color: var(--text-muted); font-size: 10px; display: block;">Active Backlogs</span>
-                        <strong style="color: {% if student_record.get('Backlogs', 0)|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %}; font-size: 13px;">
-                            {{ student_record.get('Backlogs', 0) }}
+                        {% set cur_r_backlogs = student_record.get('backlogs', student_record.get('Backlogs', 0)) %}
+                        <strong style="color: {% if cur_r_backlogs|int > 0 %}var(--accent-rose){% else %}var(--accent-emerald){% endif %}; font-size: 13px;">
+                            {{ cur_r_backlogs }}
                         </strong>
                     </div>
                     <div style="background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px;">
                         <span style="color: var(--text-muted); font-size: 10px; display: block;">Drive Status</span>
+                        {% set cur_r_status = student_record.get('placed_company') or student_record.get('Placed_Company') or student_record.get('placement_status') or 'Eligible' %}
                         <strong style="color: #fff; font-size: 11px;">
-                            {{ student_record.get('Placed_Company', 'Eligible') if student_record.get('Placed_Company') and student_record.get('Placed_Company') != 'No' and student_record.get('Placed_Company') != 'None' and student_record.get('Placed_Company') != '-' else 'Eligible' }}
+                            {{ cur_r_status if cur_r_status not in ['No', 'None', '-'] else 'Eligible' }}
                         </strong>
                     </div>
                 </div>
@@ -1402,26 +1439,53 @@
                             
                             // Context Citations Event
                             if (data.type === 'context') {
+                                {% if current_user.is_student %}
+                                // Students do not receive or view citations
+                                if (citationsContainer) citationsContainer.style.display = "none";
+                                {% else %}
                                 if (data.citations && data.citations.length > 0) {
                                     currentContextTexts = data.citations.map(c => c.text);
-                                    citationsContainer.style.display = "block";
-                                    citationCount.textContent = data.citations.length;
                                     
-                                    citationList.innerHTML = data.citations.map(c => `
-                                        <div class="citation-card">
-                                            <div class="citation-header">
-                                                <div>
-                                                    <i class="fa-solid fa-file-lines" style="color: var(--accent-cyan);"></i> 
-                                                    <strong>${c.source}</strong> (Page ${c.page})
-                                                </div>
-                                                <span class="citation-score">Relevance: ${(c.score * 100).toFixed(1)}%</span>
-                                            </div>
-                                            <div class="citation-text">
-                                                "${formatMeaningfulText(c.text)}"
-                                            </div>
-                                        </div>
-                                    `).join('');
+                                    // Group unique sources and their pages for clean hyperlink badges
+                                    const sourceMap = {};
+                                    data.citations.forEach(c => {
+                                        if (!sourceMap[c.source]) {
+                                            sourceMap[c.source] = new Set();
+                                        }
+                                        if (c.page !== undefined && c.page !== null && c.page !== "") {
+                                            sourceMap[c.source].add(c.page);
+                                        }
+                                    });
+
+                                    const uniqueSources = Object.keys(sourceMap);
+                                    if (citationsContainer) {
+                                        citationsContainer.style.display = "block";
+                                        if (citationCount) citationCount.textContent = uniqueSources.length;
+                                    }
+
+                                    if (citationList) {
+                                        citationList.innerHTML = uniqueSources.map(src => {
+                                            const pages = Array.from(sourceMap[src]).sort((a,b) => a - b);
+                                            const pageText = pages.length > 0 ? (pages.length === 1 ? `Page ${pages[0]}` : `Pages ${pages.join(', ')}`) : '';
+                                            const ext = src.split('.').pop().toLowerCase();
+                                            let icon = 'fa-file-lines';
+                                            if (ext === 'pdf') icon = 'fa-file-pdf';
+                                            else if (['csv', 'xlsx', 'xls'].includes(ext)) icon = 'fa-file-excel';
+
+                                            return `
+                                                <a href="/documents/view/${encodeURIComponent(src)}" target="_blank" class="citation-file-badge" title="Open source file ${src}">
+                                                    <i class="fa-solid ${icon}" style="color: var(--accent-cyan);"></i>
+                                                    <strong>${src}</strong>
+                                                    ${pageText ? `<span class="file-pages">${pageText}</span>` : ''}
+                                                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 10px; opacity: 0.7;"></i>
+                                                </a>
+                                            `;
+                                        }).join('');
+                                    }
+                                } else {
+                                    if (citationsContainer) citationsContainer.style.display = "none";
                                 }
+                                {% endif %}
                             }
                             
                             // Token Stream Event

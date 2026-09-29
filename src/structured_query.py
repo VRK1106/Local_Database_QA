@@ -410,9 +410,27 @@ def execute_student_scoped_query(query: str, student_id: str, documents_dir: Pat
 
 
 def get_student_record(student_id: str, documents_dir: Path) -> dict | None:
-    """Fetch the single verified row for student_id from any indexed structured placement database."""
+    """Fetch the single verified row for student_id from auth.db student_records or universal documents."""
     if not student_id:
         return None
+
+    # Step 1: Check authoritative student_records in auth.db
+    try:
+        from src.auth import get_student_record_by_id
+        db_rec = get_student_record_by_id(student_id)
+        if db_rec:
+            rec = dict(db_rec)
+            # Normalize canonical aliases for templates & prompt builders
+            rec["CGPA"] = rec.get("cgpa", 0.0)
+            rec["Branch"] = rec.get("specialization", "Computer Science")
+            rec["Department"] = rec.get("specialization", "Computer Science")
+            rec["Backlogs"] = rec.get("backlogs", 0)
+            rec["Placed_Company"] = rec.get("placed_company") or rec.get("placement_status") or "Eligible"
+            return rec
+    except Exception:
+        pass
+
+    # Step 2: Fallback to scanning uploaded documents
     tmp_path, conn, table_schemas = build_universal_sqlite_db(documents_dir, None)
     if not table_schemas:
         if conn:
@@ -455,5 +473,13 @@ def get_student_record(student_id: str, documents_dir: Path) -> dict | None:
 
     if not row:
         return None
-    return dict(zip(col_names, row))
+
+    rec = dict(zip(col_names, row))
+    # Normalize aliases
+    rec["CGPA"] = rec.get("cgpa") or rec.get("CGPA") or "—"
+    rec["Branch"] = rec.get("specialization") or rec.get("branch") or rec.get("department") or rec.get("Branch") or "General"
+    rec["Department"] = rec["Branch"]
+    rec["Backlogs"] = rec.get("backlogs") or rec.get("Backlogs") or 0
+    rec["Placed_Company"] = rec.get("placement_status") or rec.get("placed_company") or rec.get("Placed_Company") or "Eligible"
+    return rec
 

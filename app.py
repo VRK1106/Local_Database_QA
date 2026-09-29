@@ -91,7 +91,11 @@ from src.auth import (
     has_permission,
     PERMISSIONS,
     set_user_role,
-    set_user_active_status
+    set_user_active_status,
+    seed_student_records_from_documents,
+    get_all_student_records,
+    upsert_student_record,
+    delete_student_record
 )
 from src.scopes import (
     QueryScope,
@@ -125,6 +129,7 @@ app.cli.add_command(create_developer_cmd)
 
 # Initialize SQLite tables & default seed
 init_auth_db()
+seed_student_records_from_documents(DOCUMENTS_DIR)
 
 # Setup Flask-Login session manager
 login_manager = LoginManager()
@@ -441,6 +446,82 @@ def admin_import_students():
     except Exception as e:
         flash(f"Student CSV import error: {e}", "danger")
         return redirect(url_for('admin_users_page'))
+
+
+@app.route('/admin/students', methods=['GET'])
+@permission_required('students.manage')
+def admin_students_page():
+    """Placement officer & Coordinator portal to view, alter, and manage student records."""
+    seed_student_records_from_documents(DOCUMENTS_DIR)
+    students = get_all_student_records()
+    return render_template('admin_students.html', students=students, active_page='students')
+
+
+@app.route('/admin/students/save', methods=['POST'])
+@permission_required('students.manage')
+def admin_students_save():
+    """Modify or insert a student academic and placement record."""
+    student_id = request.form.get('student_id', '').strip()
+    name = request.form.get('name', '').strip()
+    specialization = request.form.get('specialization', '').strip()
+    cgpa = request.form.get('cgpa', '0.0').strip()
+    backlogs = request.form.get('backlogs', '0').strip()
+    placement_status = request.form.get('placement_status', 'Eligible').strip()
+    placed_company = request.form.get('placed_company', '').strip() or None
+
+    if not student_id or not name:
+        flash("Student ID and Full Name are required.", "danger")
+        return redirect(url_for('admin_students_page'))
+
+    data = {
+        "student_id": student_id,
+        "name": name,
+        "specialization": specialization or "Computer Science",
+        "cgpa": cgpa,
+        "backlogs": backlogs,
+        "placement_status": placement_status,
+        "placed_company": placed_company
+    }
+
+    success = upsert_student_record(data)
+    if success:
+        log_audit_event(
+            actor_user_id=current_user.id,
+            actor_username=current_user.username,
+            effective_role=current_user.role,
+            action="student_record_modified",
+            endpoint="/admin/students/save",
+            detail=f"Modified student {student_id} ({name}): CGPA={cgpa}, Backlogs={backlogs}, Status={placement_status}",
+            effective_student_id=student_id,
+            status="success",
+            ip_address=request.remote_addr
+        )
+        flash(f"Student record for '{student_id}' ({name}) updated successfully!", "success")
+    else:
+        flash("Failed to save student record.", "danger")
+
+    return redirect(url_for('admin_students_page'))
+
+
+@app.route('/admin/students/delete/<student_id>', methods=['POST'])
+@permission_required('students.manage')
+def admin_students_delete(student_id):
+    """Delete a student record with audit tracking."""
+    deleted = delete_student_record(student_id)
+    if deleted:
+        log_audit_event(
+            actor_user_id=current_user.id,
+            actor_username=current_user.username,
+            effective_role=current_user.role,
+            action="student_record_deleted",
+            endpoint=f"/admin/students/delete/{student_id}",
+            detail=f"Deleted student record: {student_id}",
+            effective_student_id=student_id,
+            status="success",
+            ip_address=request.remote_addr
+        )
+        flash(f"Student record '{student_id}' was removed.", "info")
+    return redirect(url_for('admin_students_page'))
 
 
 @app.route('/audit_logs', methods=['GET'])
@@ -1107,43 +1188,79 @@ def api_stream_query():
     )
 
     def event_stream():
-        # -------------------------------------------------------------
-        # Path A: Authenticated Student Scope (Zero-Trust Row-Level Isolation)
-        # -------------------------------------------------------------
-        if scope.sql_mode() == "own_record":
-            if is_aggregate_query(query):
-                notice_msg = (
-                    "**Access Restricted:** Institutional aggregates, batch statistics, and peer rankings "
-                    "are confidential and reserved for Placement Officers. "
-                    "You may ask questions about placement eligibility criteria, company visit schedules, "
-                    "or your personal placement profile."
-                )
-                yield f"data: {json.dumps({'type': 'context', 'citations': []})}\n\n"
-                yield f"data: {json.dumps({'token': notice_msg})}\n\n"
-                return
+        # Flush immediate SSE comment so Cloudflare / reverse proxies immediately open the stream
+        yield ": ping\n\n"
+        try:
+            # -------------------------------------------------------------
+            # Path A: Authenticated Student Scope (Zero-Trust Row-Level Isolation)
+            # -------------------------------------------------------------
+            if scope.sql_mode() == "own_record":
+                if is_aggregate_query(query):
+                    notice_msg = (
+                        "**Access Restricted:** Institutional aggregates, batch statistics, and peer rankings "
+                        "are confidential and reserved for Placement Officers. "
+                        "You may ask questions about placement eligibility criteria, company visit schedules, "
+                        "or your personal placement profile."
+                    )
+                    yield f"data: {json.dumps({'type': 'context', 'citations': []})}\n\n"
+                    yield f"data: {json.dumps({'token': notice_msg})}\n\n"
+                    return
 
-            final_prompt, sql_q, sql_res, citations = execute_student_scoped_query(
-                query=query,
-                student_id=scope.bound_student_id(),
-                documents_dir=DOCUMENTS_DIR,
-                model_name=model
-            )
-            if final_prompt:
-                yield f"data: {json.dumps({'type': 'context', 'citations': citations})}\n\n"
-                for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
+                final_prompt, sql_q, sql_res, citations = execute_student_scoped_query(
+                    query=query,
+                    student_id=scope.bound_student_id(),
+                    documents_dir=DOCUMENTS_DIR,
+                    model_name=model
+                )
+                if final_prompt:
+                    # Students do not require citations for answer retrieval
+                    yield f"data: {json.dumps({'type': 'context', 'citations': []})}\n\n"
+                    for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
+                        yield stream_chunk
+                    return
+
+                # Semantic Vector Search: Strictly visibility='public'
+                context_chunks = []
+                if mode == 'rag':
+                    query_vec = embed_query(query)
+                    context_chunks = search(
+                        query_vec,
+                        top_k=top_k,
+                        source_filters=sources if sources else None,
+                        visibility="public"
+                    )
+
+                    # Students do not require citations for answer retrieval
+                    yield f"data: {json.dumps({'type': 'context', 'citations': []})}\n\n"
+                    prompt = build_rag_prompt(query, context_chunks)
+                else:
+                    prompt = query
+                    yield f"data: {json.dumps({'type': 'context', 'citations': []})}\n\n"
+
+                for stream_chunk in generate_ollama_stream(prompt=prompt, model_name=model):
                     yield stream_chunk
                 return
 
-            # Semantic Vector Search: Strictly visibility='public'
+            # -------------------------------------------------------------
+            # Path B: Placement Officer & Developer Scope (Full Administrative Reach)
+            # -------------------------------------------------------------
+            if mode == 'rag' and is_aggregate_query(query):
+                final_prompt, sql_q, sql_res, citations = execute_universal_structured_query(
+                    query=query,
+                    documents_dir=DOCUMENTS_DIR,
+                    selected_sources=sources if sources else None,
+                    model_name=model
+                )
+                if final_prompt:
+                    yield f"data: {json.dumps({'type': 'context', 'citations': citations})}\n\n"
+                    for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
+                        yield stream_chunk
+                    return
+
             context_chunks = []
             if mode == 'rag':
                 query_vec = embed_query(query)
-                context_chunks = search(
-                    query_vec,
-                    top_k=top_k,
-                    source_filters=sources if sources else None,
-                    visibility="public"
-                )
+                context_chunks = search(query_vec, top_k=top_k, source_filters=sources if sources else None)
 
                 citations = [{
                     "source": c["source"],
@@ -1160,46 +1277,14 @@ def api_stream_query():
 
             for stream_chunk in generate_ollama_stream(prompt=prompt, model_name=model):
                 yield stream_chunk
-            return
 
-        # -------------------------------------------------------------
-        # Path B: Placement Officer & Developer Scope (Full Administrative Reach)
-        # -------------------------------------------------------------
-        if mode == 'rag' and is_aggregate_query(query):
-            final_prompt, sql_q, sql_res, citations = execute_universal_structured_query(
-                query=query,
-                documents_dir=DOCUMENTS_DIR,
-                selected_sources=sources if sources else None,
-                model_name=model
-            )
-            if final_prompt:
-                yield f"data: {json.dumps({'type': 'context', 'citations': citations})}\n\n"
-                for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
-                    yield stream_chunk
-                return
+        except Exception as e:
+            yield f"data: {json.dumps({'error': f'Streaming backend error: {str(e)}'})}\n\n"
 
-        context_chunks = []
-        if mode == 'rag':
-            query_vec = embed_query(query)
-            context_chunks = search(query_vec, top_k=top_k, source_filters=sources if sources else None)
-
-            citations = [{
-                "source": c["source"],
-                "page": c["page"],
-                "score": c["score"],
-                "text": c["text"]
-            } for c in context_chunks]
-
-            yield f"data: {json.dumps({'type': 'context', 'citations': citations})}\n\n"
-            prompt = build_rag_prompt(query, context_chunks)
-        else:
-            prompt = query
-            yield f"data: {json.dumps({'type': 'context', 'citations': []})}\n\n"
-
-        for stream_chunk in generate_ollama_stream(prompt=prompt, model_name=model):
-            yield stream_chunk
-
-    return Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+    response = Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+    response.headers['Cache-Control'] = 'no-cache, no-transform'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
 
 
 @app.route('/api/verify_trust', methods=['POST'])

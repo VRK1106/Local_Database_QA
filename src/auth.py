@@ -35,6 +35,7 @@ PERMISSIONS = {
         "users.import_students",
         "users.reset_student_password",
         "users.disable_student",
+        "students.manage",
         "audit.view_own_portal",
         "tickets.create",
         "tickets.view_own",
@@ -197,6 +198,23 @@ def init_auth_db():
             is_internal_note INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+        );
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS student_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            gender TEXT DEFAULT 'Other',
+            location TEXT DEFAULT 'Campus',
+            specialization TEXT DEFAULT 'Computer Science',
+            cgpa REAL DEFAULT 0.0,
+            backlogs INTEGER DEFAULT 0,
+            internships INTEGER DEFAULT 0,
+            placement_status TEXT DEFAULT 'Eligible',
+            placed_company TEXT DEFAULT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
     conn.commit()
@@ -594,3 +612,158 @@ def import_students_from_csv(csv_content: str) -> tuple[int, int, list[dict]]:
     conn.commit()
     conn.close()
     return created, skipped, generated_credentials
+
+
+# =========================================================================
+# Student Academic Records Management (Placement Officers / Coordinators)
+# =========================================================================
+
+def seed_student_records_from_documents(documents_dir: Path | str):
+    """Auto-seed student_records in auth.db from Mock_Placement.xlsx or CSV files in documents_dir if table is empty."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM student_records;")
+    cnt = cur.fetchone()[0]
+    if cnt > 0:
+        conn.close()
+        return
+
+    doc_p = Path(documents_dir)
+    if not doc_p.exists():
+        conn.close()
+        return
+
+    import pandas as pd
+    for f in doc_p.glob("**/*"):
+        if f.suffix.lower() in [".xlsx", ".xls"]:
+            try:
+                df = pd.read_excel(f, header=None).dropna(how='all')
+                if not df.empty:
+                    header_label = df.notna().sum(axis=1).idxmax()
+                    header_pos = df.index.get_loc(header_label)
+                    df.columns = df.iloc[header_pos].astype(str).str.strip()
+                    df = df.iloc[header_pos + 1:].reset_index(drop=True)
+                    df = df.dropna(how='all', axis=1)
+
+                    col_map = {}
+                    for c in df.columns:
+                        cl = str(c).strip().lower()
+                        if 'student' in cl or 'usn' in cl or 'roll' in cl:
+                            col_map['student_id'] = c
+                        elif 'name' in cl:
+                            col_map['name'] = c
+                        elif 'special' in cl or 'branch' in cl or 'dept' in cl:
+                            col_map['specialization'] = c
+                        elif 'cgpa' in cl or 'gpa' in cl:
+                            col_map['cgpa'] = c
+                        elif 'backlog' in cl:
+                            col_map['backlogs'] = c
+                        elif 'status' in cl:
+                            col_map['placement_status'] = c
+                        elif 'company' in cl:
+                            col_map['placed_company'] = c
+
+                    if 'student_id' in col_map:
+                        for _, row in df.iterrows():
+                            s_id = str(row.get(col_map['student_id'], '')).strip()
+                            if not s_id or s_id.lower() == 'nan':
+                                continue
+                            name_val = str(row.get(col_map.get('name', ''), s_id)).strip()
+                            spec_val = str(row.get(col_map.get('specialization', ''), 'Computer Science')).strip()
+                            try:
+                                cgpa_val = round(float(row.get(col_map.get('cgpa', 0), 0.0)), 2)
+                            except:
+                                cgpa_val = 0.0
+                            try:
+                                backlogs_val = int(row.get(col_map.get('backlogs', 0), 0))
+                            except:
+                                backlogs_val = 0
+                            p_status = str(row.get(col_map.get('placement_status', ''), 'Eligible')).strip()
+                            p_comp = str(row.get(col_map.get('placed_company', ''), '')).strip() or None
+                            if p_comp in ['nan', 'None', '-']:
+                                p_comp = None
+
+                            cur.execute("""
+                                INSERT OR IGNORE INTO student_records 
+                                (student_id, name, specialization, cgpa, backlogs, placement_status, placed_company)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (s_id, name_val, spec_val, cgpa_val, backlogs_val, p_status, p_comp))
+                        conn.commit()
+            except Exception:
+                pass
+    conn.close()
+
+
+def get_all_student_records() -> list[dict]:
+    """Retrieve all student academic records sorted by student_id."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM student_records ORDER BY student_id ASC;")
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_student_record_by_id(student_id: str) -> dict | None:
+    """Retrieve verified student record by student_id (case-insensitive)."""
+    if not student_id:
+        return None
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM student_records WHERE LOWER(TRIM(student_id)) = ? LIMIT 1;", (student_id.strip().lower(),))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def upsert_student_record(data: dict) -> bool:
+    """Insert or update a student record by student_id."""
+    student_id = str(data.get('student_id', '')).strip().upper()
+    if not student_id:
+        return False
+    name = str(data.get('name', student_id)).strip()
+    specialization = str(data.get('specialization', 'Computer Science')).strip()
+    try:
+        cgpa = round(float(data.get('cgpa', 0.0)), 2)
+    except:
+        cgpa = 0.0
+    try:
+        backlogs = int(data.get('backlogs', 0))
+    except:
+        backlogs = 0
+    placement_status = str(data.get('placement_status', 'Eligible')).strip()
+    placed_company = str(data.get('placed_company', '')).strip() or None
+    if placed_company in ['None', 'nan', '-', '']:
+        placed_company = None
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO student_records (student_id, name, specialization, cgpa, backlogs, placement_status, placed_company, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(student_id) DO UPDATE SET
+            name = excluded.name,
+            specialization = excluded.specialization,
+            cgpa = excluded.cgpa,
+            backlogs = excluded.backlogs,
+            placement_status = excluded.placement_status,
+            placed_company = excluded.placed_company,
+            updated_at = CURRENT_TIMESTAMP;
+    """, (student_id, name, specialization, cgpa, backlogs, placement_status, placed_company))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def delete_student_record(student_id: str) -> bool:
+    """Delete a student record by student_id."""
+    if not student_id:
+        return False
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM student_records WHERE LOWER(TRIM(student_id)) = ?;", (student_id.strip().lower(),))
+    deleted = cur.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+

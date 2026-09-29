@@ -578,6 +578,9 @@
             <a href="{{ url_for('documents_page') }}" class="nav-link {% if active_page == 'documents' %}active{% endif %}">
                 <i class="fa-solid fa-folder-open"></i> Document Manager
             </a>
+            <a href="{{ url_for('admin_students_page') }}" class="nav-link {% if active_page == 'students' %}active{% endif %}">
+                <i class="fa-solid fa-user-graduate" style="color: var(--accent-cyan);"></i> Student Records
+            </a>
             <a href="{{ url_for('admin_users_page') }}" class="nav-link {% if active_page == 'users' %}active{% endif %}">
                 <i class="fa-solid fa-users-gear"></i> User Accounts
             </a>
