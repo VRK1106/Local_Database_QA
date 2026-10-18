@@ -13,9 +13,13 @@ warnings.filterwarnings("ignore")
 import sys
 import json
 import time
+import asyncio
+import queue
+import threading
 from pathlib import Path
 from io import BytesIO
 from functools import wraps
+from fastapi.concurrency import run_in_threadpool
 
 from flask import (
     Flask,
@@ -67,9 +71,12 @@ from src.vectorstore import (
 from src.ollama_client import (
     list_ollama_models,
     check_ollama_health,
+    check_ollama_health_async,
     build_rag_prompt,
     generate_ollama_answer,
-    generate_ollama_stream
+    generate_ollama_answer_async,
+    generate_ollama_stream,
+    generate_ollama_stream_async
 )
 from src.structured_query import (
     is_aggregate_query,
@@ -147,72 +154,136 @@ def load_user(user_id):
 def permission_required(perm: str):
     """Decorator to enforce granular permission checks with audit logging and impersonation support."""
     def decorator(f):
-        @wraps(f)
-        def decorated_view(*args, **kwargs):
-            if not current_user.is_authenticated:
-                if request.is_json or request.path.startswith('/api/'):
-                    return jsonify({"status": "error", "message": "Authentication required."}), 401
-                flash("Please sign in to access this page.", "warning")
-                return redirect(url_for('login', next=request.url))
+        if asyncio.iscoroutinefunction(f):
+            @wraps(f)
+            async def decorated_view(*args, **kwargs):
+                if not current_user.is_authenticated:
+                    if request.is_json or request.path.startswith('/api/'):
+                        return jsonify({"status": "error", "message": "Authentication required."}), 401
+                    flash("Please sign in to access this page.", "warning")
+                    return redirect(url_for('login', next=request.url))
 
-            if not has_permission(current_user, perm):
-                eff_role = session.get("view_as", {}).get("role") if session.get("view_as") else current_user.role
-                eff_stu_id = session.get("view_as", {}).get("student_id") if session.get("view_as") else getattr(current_user, "student_id", None)
-                log_audit_event(
-                    actor_user_id=current_user.id,
-                    actor_username=current_user.username,
-                    effective_role=eff_role,
-                    effective_student_id=eff_stu_id,
-                    action="permission_denied",
-                    endpoint=request.path,
-                    detail=f"Required permission: '{perm}'",
-                    status="forbidden",
-                    ip_address=request.remote_addr
-                )
-                if request.is_json or request.path.startswith('/api/'):
-                    return jsonify({"status": "error", "message": f"Access forbidden: requires permission '{perm}'."}), 403
-                flash(f"Access denied: you do not hold permission '{perm}'.", "danger")
-                return redirect(url_for('index'))
+                if not has_permission(current_user, perm):
+                    eff_role = session.get("view_as", {}).get("role") if session.get("view_as") else current_user.role
+                    eff_stu_id = session.get("view_as", {}).get("student_id") if session.get("view_as") else getattr(current_user, "student_id", None)
+                    log_audit_event(
+                        actor_user_id=current_user.id,
+                        actor_username=current_user.username,
+                        effective_role=eff_role,
+                        effective_student_id=eff_stu_id,
+                        action="permission_denied",
+                        endpoint=request.path,
+                        detail=f"Required permission: '{perm}'",
+                        status="forbidden",
+                        ip_address=request.remote_addr
+                    )
+                    if request.is_json or request.path.startswith('/api/'):
+                        return jsonify({"status": "error", "message": f"Access forbidden: requires permission '{perm}'."}), 403
+                    flash(f"Access denied: you do not hold permission '{perm}'.", "danger")
+                    return redirect(url_for('index'))
 
-            return f(*args, **kwargs)
-        return decorated_view
+                return await f(*args, **kwargs)
+            return decorated_view
+        else:
+            @wraps(f)
+            def decorated_view(*args, **kwargs):
+                if not current_user.is_authenticated:
+                    if request.is_json or request.path.startswith('/api/'):
+                        return jsonify({"status": "error", "message": "Authentication required."}), 401
+                    flash("Please sign in to access this page.", "warning")
+                    return redirect(url_for('login', next=request.url))
+
+                if not has_permission(current_user, perm):
+                    eff_role = session.get("view_as", {}).get("role") if session.get("view_as") else current_user.role
+                    eff_stu_id = session.get("view_as", {}).get("student_id") if session.get("view_as") else getattr(current_user, "student_id", None)
+                    log_audit_event(
+                        actor_user_id=current_user.id,
+                        actor_username=current_user.username,
+                        effective_role=eff_role,
+                        effective_student_id=eff_stu_id,
+                        action="permission_denied",
+                        endpoint=request.path,
+                        detail=f"Required permission: '{perm}'",
+                        status="forbidden",
+                        ip_address=request.remote_addr
+                    )
+                    if request.is_json or request.path.startswith('/api/'):
+                        return jsonify({"status": "error", "message": f"Access forbidden: requires permission '{perm}'."}), 403
+                    flash(f"Access denied: you do not hold permission '{perm}'.", "danger")
+                    return redirect(url_for('index'))
+
+                return f(*args, **kwargs)
+            return decorated_view
     return decorator
 
 
 def role_required(*roles):
     """Backwards-compatibility role decorator mapping into role/permission checks."""
     def decorator(f):
-        @wraps(f)
-        def decorated_view(*args, **kwargs):
-            if not current_user.is_authenticated:
-                if request.is_json or request.path.startswith('/api/'):
-                    return jsonify({"status": "error", "message": "Authentication required."}), 401
-                flash("Please sign in to access this page.", "warning")
-                return redirect(url_for('login', next=request.url))
+        if asyncio.iscoroutinefunction(f):
+            @wraps(f)
+            async def decorated_view(*args, **kwargs):
+                if not current_user.is_authenticated:
+                    if request.is_json or request.path.startswith('/api/'):
+                        return jsonify({"status": "error", "message": "Authentication required."}), 401
+                    flash("Please sign in to access this page.", "warning")
+                    return redirect(url_for('login', next=request.url))
 
-            eff_role = session.get("view_as", {}).get("role") if session.get("view_as") else current_user.role
-            allowed = set(roles)
-            if "placement" in allowed:
-                allowed.add("developer")
+                eff_role = session.get("view_as", {}).get("role") if session.get("view_as") else current_user.role
+                allowed = set(roles)
+                if "placement" in allowed:
+                    allowed.add("developer")
 
-            if eff_role not in allowed:
-                log_audit_event(
-                    actor_user_id=current_user.id,
-                    actor_username=current_user.username,
-                    effective_role=eff_role,
-                    action="role_denied",
-                    endpoint=request.path,
-                    detail=f"Required roles: {roles}",
-                    status="forbidden",
-                    ip_address=request.remote_addr
-                )
-                if request.is_json or request.path.startswith('/api/'):
-                    return jsonify({"status": "error", "message": "Access forbidden: insufficient role permissions."}), 403
-                flash("Access denied: You do not have permissions for this section.", "danger")
-                return redirect(url_for('index'))
+                if eff_role not in allowed:
+                    log_audit_event(
+                        actor_user_id=current_user.id,
+                        actor_username=current_user.username,
+                        effective_role=eff_role,
+                        action="role_denied",
+                        endpoint=request.path,
+                        detail=f"Required roles: {roles}",
+                        status="forbidden",
+                        ip_address=request.remote_addr
+                    )
+                    if request.is_json or request.path.startswith('/api/'):
+                        return jsonify({"status": "error", "message": "Access forbidden: insufficient role permissions."}), 403
+                    flash("Access denied: You do not have permissions for this section.", "danger")
+                    return redirect(url_for('index'))
 
-            return f(*args, **kwargs)
-        return decorated_view
+                return await f(*args, **kwargs)
+            return decorated_view
+        else:
+            @wraps(f)
+            def decorated_view(*args, **kwargs):
+                if not current_user.is_authenticated:
+                    if request.is_json or request.path.startswith('/api/'):
+                        return jsonify({"status": "error", "message": "Authentication required."}), 401
+                    flash("Please sign in to access this page.", "warning")
+                    return redirect(url_for('login', next=request.url))
+
+                eff_role = session.get("view_as", {}).get("role") if session.get("view_as") else current_user.role
+                allowed = set(roles)
+                if "placement" in allowed:
+                    allowed.add("developer")
+
+                if eff_role not in allowed:
+                    log_audit_event(
+                        actor_user_id=current_user.id,
+                        actor_username=current_user.username,
+                        effective_role=eff_role,
+                        action="role_denied",
+                        endpoint=request.path,
+                        detail=f"Required roles: {roles}",
+                        status="forbidden",
+                        ip_address=request.remote_addr
+                    )
+                    if request.is_json or request.path.startswith('/api/'):
+                        return jsonify({"status": "error", "message": "Access forbidden: insufficient role permissions."}), 403
+                    flash("Access denied: You do not have permissions for this section.", "danger")
+                    return redirect(url_for('index'))
+
+                return f(*args, **kwargs)
+            return decorated_view
     return decorator
 
 
@@ -1162,10 +1233,62 @@ def api_delete_doc():
     return redirect(url_for('documents_page'))
 
 
+def stream_async_generator(async_gen_func, *args, **kwargs):
+    """
+    Bridge an asynchronous generator to a synchronous generator for WSGI chunked SSE delivery.
+    Runs the async generator in a dedicated background event loop, preventing event-loop or thread starvation.
+    """
+    q = queue.Queue(maxsize=100)
+    SENTINEL = object()
+
+    def run_loop():
+        async def runner():
+            try:
+                async for chunk in async_gen_func(*args, **kwargs):
+                    q.put(chunk)
+            except Exception as e:
+                q.put(f"data: {json.dumps({'error': f'Streaming backend error: {str(e)}'})}\n\n")
+            finally:
+                q.put(SENTINEL)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(runner())
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass
+        finally:
+            loop.close()
+
+    t = threading.Thread(target=run_loop, daemon=True)
+    t.start()
+
+    while True:
+        item = q.get()
+        if item is SENTINEL:
+            break
+        yield item
+
+
+@app.route('/health', methods=['GET'])
+@app.route('/api/health', methods=['GET'])
+async def health_check():
+    """
+    Lightweight, asynchronous orchestrator health-check ping endpoint.
+    Guaranteed to respond immediately (< 1ms) to Kubernetes / Docker / AWS ECS probes without starving or blocking.
+    """
+    return jsonify({
+        "status": "healthy",
+        "service": "amypo-qa-system",
+        "timestamp": time.time()
+    }), 200
+
+
 @app.route('/api/stream_query', methods=['POST'])
 @login_required
 def api_stream_query():
-    """Stream response tokens from Ollama using SSE with strict QueryScope data isolation."""
+    """Stream response tokens from Ollama using SSE with strict QueryScope data isolation and non-blocking async execution."""
     data = request.get_json() or {}
     query = data.get('query', '').strip()
     model = data.get('model') or list_ollama_models()[0]
@@ -1177,6 +1300,8 @@ def api_stream_query():
         return jsonify({"error": "Empty query"}), 400
 
     scope = scope_for(current_user)
+    scope_sql_mode = scope.sql_mode()
+    scope_bound_student_id = scope.bound_student_id()
 
     # Record query into immutable audit trail with actor vs effective role
     eff_role = session.get("view_as", {}).get("role") if session.get("view_as") else current_user.role
@@ -1193,14 +1318,14 @@ def api_stream_query():
         ip_address=request.remote_addr
     )
 
-    def event_stream():
+    async def async_event_stream():
         # Flush immediate SSE comment so Cloudflare / reverse proxies immediately open the stream
         yield ": ping\n\n"
         try:
             # -------------------------------------------------------------
             # Path A: Authenticated Student Scope (Zero-Trust Row-Level Isolation)
             # -------------------------------------------------------------
-            if scope.sql_mode() == "own_record":
+            if scope_sql_mode == "own_record":
                 if is_aggregate_query(query):
                     notice_msg = (
                         "**Access Restricted:** Institutional aggregates, batch statistics, and peer rankings "
@@ -1212,16 +1337,16 @@ def api_stream_query():
                     yield f"data: {json.dumps({'token': notice_msg})}\n\n"
                     return
 
-                final_prompt, sql_q, sql_res, citations = execute_student_scoped_query(
+                final_prompt, sql_q, sql_res, citations = await run_in_threadpool(
+                    execute_student_scoped_query,
                     query=query,
-                    student_id=scope.bound_student_id(),
+                    student_id=scope_bound_student_id,
                     documents_dir=DOCUMENTS_DIR,
                     model_name=model
                 )
                 if final_prompt:
-                    # Students do not require citations for answer retrieval, but verify mathematically
                     yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': ['Universal Structured Execution (SQLite)']})}\n\n"
-                    for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
+                    async for stream_chunk in generate_ollama_stream_async(prompt=final_prompt, model_name=model):
                         yield stream_chunk
                     yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}})}\n\n"
                     return
@@ -1229,11 +1354,13 @@ def api_stream_query():
                 # Semantic Vector Search: Strictly visibility='public'
                 context_chunks = []
                 if mode == 'rag':
-                    query_vec = embed_query(query)
-                    context_chunks = search(
-                        query_vec,
+                    query_vec = await run_in_threadpool(embed_query, query)
+                    context_chunks = await run_in_threadpool(
+                        search,
+                        query_embedding=query_vec,
                         top_k=top_k,
                         source_filters=sources if sources else None,
+                        threshold=0.0,
                         visibility="public"
                     )
                     context_texts = [c["text"] for c in context_chunks]
@@ -1243,7 +1370,7 @@ def api_stream_query():
                     prompt = query
                     yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []})}\n\n"
 
-                for stream_chunk in generate_ollama_stream(prompt=prompt, model_name=model):
+                async for stream_chunk in generate_ollama_stream_async(prompt=prompt, model_name=model):
                     yield stream_chunk
                 return
 
@@ -1251,7 +1378,8 @@ def api_stream_query():
             # Path B: Placement Officer & Developer Scope (Full Administrative Reach)
             # -------------------------------------------------------------
             if mode == 'rag' and is_aggregate_query(query):
-                final_prompt, sql_q, sql_res, citations = execute_universal_structured_query(
+                final_prompt, sql_q, sql_res, citations = await run_in_threadpool(
+                    execute_universal_structured_query,
                     query=query,
                     documents_dir=DOCUMENTS_DIR,
                     selected_sources=sources if sources else None,
@@ -1259,15 +1387,20 @@ def api_stream_query():
                 )
                 if final_prompt:
                     yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']})}\n\n"
-                    for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
+                    async for stream_chunk in generate_ollama_stream_async(prompt=final_prompt, model_name=model):
                         yield stream_chunk
                     yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}})}\n\n"
                     return
 
             context_chunks = []
             if mode == 'rag':
-                query_vec = embed_query(query)
-                context_chunks = search(query_vec, top_k=top_k, source_filters=sources if sources else None)
+                query_vec = await run_in_threadpool(embed_query, query)
+                context_chunks = await run_in_threadpool(
+                    search,
+                    query_embedding=query_vec,
+                    top_k=top_k,
+                    source_filters=sources if sources else None
+                )
 
                 citations = [{
                     "source": c["source"],
@@ -1283,13 +1416,13 @@ def api_stream_query():
                 prompt = query
                 yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []})}\n\n"
 
-            for stream_chunk in generate_ollama_stream(prompt=prompt, model_name=model):
+            async for stream_chunk in generate_ollama_stream_async(prompt=prompt, model_name=model):
                 yield stream_chunk
 
         except Exception as e:
             yield f"data: {json.dumps({'error': f'Streaming backend error: {str(e)}'})}\n\n"
 
-    response = Response(stream_with_context(event_stream()), mimetype="text/event-stream")
+    response = Response(stream_with_context(stream_async_generator(async_event_stream)), mimetype="text/event-stream")
     response.headers['Cache-Control'] = 'no-cache, no-transform'
     response.headers['X-Accel-Buffering'] = 'no'
     return response
@@ -1297,8 +1430,8 @@ def api_stream_query():
 
 @app.route('/api/verify_trust', methods=['POST'])
 @login_required
-def api_verify_trust():
-    """Asynchronous background endpoint to verify hallucination claims."""
+async def api_verify_trust():
+    """Asynchronous background endpoint to verify hallucination claims without thread blocking."""
     data = request.get_json() or {}
     draft_answer = data.get('answer', '').strip()
     context_texts = data.get('context_texts', [])
@@ -1307,7 +1440,7 @@ def api_verify_trust():
         return jsonify({"score": 100, "claims": []})
         
     from src.trust_layer import verify_claims
-    verification = verify_claims(draft_answer, context_texts)
+    verification = await run_in_threadpool(verify_claims, draft_answer, context_texts)
     return jsonify(verification)
 
 

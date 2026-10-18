@@ -14,3 +14,7 @@ torch>=2.0.0
 pyautogui>=0.9.54
 Pillow>=9.5.0
 waitress>=2.1.2
+httpx>=0.24.0
+fastapi>=0.100.0
+psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0

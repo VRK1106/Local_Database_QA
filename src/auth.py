@@ -1,6 +1,8 @@
 """Authentication, Permission Registry, and Security Auditing for Portals and Developer Role."""
 
 from __future__ import annotations
+import os
+import re
 import sqlite3
 import datetime
 import secrets
@@ -9,7 +11,14 @@ from pathlib import Path
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from src.config import AUTH_DB_PATH
+from src.config import AUTH_DB_PATH, DATABASE_URL, USE_POSTGRES
+
+try:
+    import psycopg2
+    import psycopg2.extras
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
 
 
 # =========================================================================
@@ -123,105 +132,306 @@ class User(UserMixin):
         return has_permission(self, perm)
 
 
-def get_db_connection() -> sqlite3.Connection:
-    """Return a thread-safe connection to the authentication SQLite database."""
+def _translate_sqlite_to_postgres(sql: str) -> str:
+    """Translates SQLite SQL syntax (? parameter placeholders) to PostgreSQL (%s)."""
+    parts = re.split(r"('(?:''|[^'])*')", sql)
+    for i in range(0, len(parts), 2):
+        parts[i] = parts[i].replace("?", "%s")
+    return "".join(parts)
+
+
+class PostgresCursorWrapper:
+    """Cursor wrapper that transparently adapts SQLite ? placeholders and dict-indexing for PostgreSQL."""
+    def __init__(self, raw_cursor, conn):
+        self._cur = raw_cursor
+        self._conn = conn
+        self._last_insert_id = None
+
+    def execute(self, sql: str, params=None):
+        converted_sql = _translate_sqlite_to_postgres(sql)
+        is_insert = converted_sql.strip().upper().startswith("INSERT")
+
+        # Automatically capture generated primary key if INSERT doesn't already have RETURNING
+        if is_insert and "RETURNING" not in converted_sql.upper():
+            converted_sql_with_ret = converted_sql.rstrip().rstrip(";") + " RETURNING id;"
+            try:
+                if params is not None:
+                    self._cur.execute(converted_sql_with_ret, params)
+                else:
+                    self._cur.execute(converted_sql_with_ret)
+                row = self._cur.fetchone()
+                if row:
+                    self._last_insert_id = row[0]
+                return self
+            except Exception:
+                try:
+                    self._conn._raw_conn.rollback()
+                except Exception:
+                    pass
+
+        if params is not None:
+            self._cur.execute(converted_sql, params)
+        else:
+            self._cur.execute(converted_sql)
+        return self
+
+    def executemany(self, sql: str, seq_of_params):
+        converted_sql = _translate_sqlite_to_postgres(sql)
+        return self._cur.executemany(converted_sql, seq_of_params)
+
+    def executescript(self, sql_script: str):
+        converted_script = _translate_sqlite_to_postgres(sql_script)
+        return self._cur.execute(converted_script)
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    @property
+    def lastrowid(self):
+        return self._last_insert_id
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+    @property
+    def description(self):
+        return self._cur.description
+
+    def close(self):
+        self._cur.close()
+
+
+class PostgresConnectionWrapper:
+    """Connection wrapper presenting a thread-safe DB-API interface with PostgreSQL backend."""
+    _is_postgres = True
+
+    def __init__(self, raw_conn):
+        self._raw_conn = raw_conn
+
+    def cursor(self):
+        return PostgresCursorWrapper(self._raw_conn.cursor(cursor_factory=psycopg2.extras.DictCursor), self)
+
+    def commit(self):
+        return self._raw_conn.commit()
+
+    def rollback(self):
+        return self._raw_conn.rollback()
+
+    def close(self):
+        return self._raw_conn.close()
+
+    def execute(self, sql: str, params=None):
+        cur = self.cursor()
+        cur.execute(sql, params)
+        return cur
+
+
+def is_postgres_connection(conn) -> bool:
+    """Return True if the active database connection is backed by PostgreSQL."""
+    return getattr(conn, "_is_postgres", False)
+
+
+def get_db_connection():
+    """Return a connection to PostgreSQL (if DATABASE_URL configured) or thread-safe SQLite fallback."""
+    if USE_POSTGRES and PSYCOPG2_AVAILABLE:
+        try:
+            raw_conn = psycopg2.connect(DATABASE_URL)
+            return PostgresConnectionWrapper(raw_conn)
+        except Exception as e:
+            print(f"[AUTH DB WARNING] Failed to connect to PostgreSQL ({e}). Falling back to SQLite.")
+
     conn = sqlite3.connect(str(AUTH_DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_auth_db():
-    """Initialize SQLite tables for users and enhanced audit logs, migrating schema if needed."""
+    """Initialize relational tables in PostgreSQL or SQLite, migrating schema and seeding defaults."""
     conn = get_db_connection()
     cur = conn.cursor()
+    is_pg = is_postgres_connection(conn)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL,
-            student_id TEXT,
-            must_change_password INTEGER DEFAULT 0,
-            active INTEGER DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS audit_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            actor_user_id INTEGER,
-            actor_username TEXT,
-            effective_role TEXT,
-            effective_student_id TEXT,
-            action TEXT NOT NULL,
-            endpoint TEXT NOT NULL,
-            detail TEXT,
-            sources TEXT,
-            status TEXT DEFAULT 'success',
-            ip_address TEXT,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS tickets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticket_number TEXT UNIQUE NOT NULL,
-            creator_id INTEGER NOT NULL,
-            creator_username TEXT NOT NULL,
-            creator_role TEXT NOT NULL,
-            target_role TEXT NOT NULL,
-            category TEXT NOT NULL,
-            priority TEXT DEFAULT 'medium',
-            status TEXT DEFAULT 'open',
-            title TEXT NOT NULL,
-            description TEXT NOT NULL,
-            student_id TEXT,
-            assigned_to_id INTEGER,
-            assigned_to_username TEXT,
-            resolution_notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS ticket_messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticket_id INTEGER NOT NULL,
-            sender_id INTEGER NOT NULL,
-            sender_username TEXT NOT NULL,
-            sender_role TEXT NOT NULL,
-            message TEXT NOT NULL,
-            is_internal_note INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
-        );
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS student_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT UNIQUE NOT NULL,
-            name TEXT NOT NULL,
-            gender TEXT DEFAULT 'Other',
-            location TEXT DEFAULT 'Campus',
-            specialization TEXT DEFAULT 'Computer Science',
-            cgpa REAL DEFAULT 0.0,
-            backlogs INTEGER DEFAULT 0,
-            internships INTEGER DEFAULT 0,
-            placement_status TEXT DEFAULT 'Eligible',
-            placed_company TEXT DEFAULT NULL,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
+    if is_pg:
+        # PostgreSQL Production Schema
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role VARCHAR(50) NOT NULL,
+                student_id VARCHAR(100),
+                must_change_password INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id SERIAL PRIMARY KEY,
+                actor_user_id INTEGER,
+                actor_username VARCHAR(255),
+                effective_role VARCHAR(50),
+                effective_student_id VARCHAR(100),
+                user_id INTEGER,
+                username VARCHAR(255),
+                role VARCHAR(50),
+                query_text TEXT,
+                action VARCHAR(100) NOT NULL,
+                endpoint VARCHAR(255) NOT NULL,
+                detail TEXT,
+                sources TEXT,
+                status VARCHAR(50) DEFAULT 'success',
+                ip_address VARCHAR(100),
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS tickets (
+                id SERIAL PRIMARY KEY,
+                ticket_number VARCHAR(100) UNIQUE NOT NULL,
+                creator_id INTEGER NOT NULL,
+                creator_username VARCHAR(255) NOT NULL,
+                creator_role VARCHAR(50) NOT NULL,
+                target_role VARCHAR(50) NOT NULL,
+                category VARCHAR(100) NOT NULL,
+                priority VARCHAR(50) DEFAULT 'medium',
+                status VARCHAR(50) DEFAULT 'open',
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                student_id VARCHAR(100),
+                assigned_to_id INTEGER,
+                assigned_to_username VARCHAR(255),
+                resolution_notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ticket_messages (
+                id SERIAL PRIMARY KEY,
+                ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                sender_id INTEGER NOT NULL,
+                sender_username VARCHAR(255) NOT NULL,
+                sender_role VARCHAR(50) NOT NULL,
+                message TEXT NOT NULL,
+                is_internal_note INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS student_records (
+                id SERIAL PRIMARY KEY,
+                student_id VARCHAR(100) UNIQUE NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                gender VARCHAR(50) DEFAULT 'Other',
+                location VARCHAR(255) DEFAULT 'Campus',
+                specialization VARCHAR(255) DEFAULT 'Computer Science',
+                cgpa REAL DEFAULT 0.0,
+                backlogs INTEGER DEFAULT 0,
+                internships INTEGER DEFAULT 0,
+                placement_status VARCHAR(100) DEFAULT 'Eligible',
+                placed_company VARCHAR(255) DEFAULT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+    else:
+        # SQLite Development / Fallback Schema
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                student_id TEXT,
+                must_change_password INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor_user_id INTEGER,
+                actor_username TEXT,
+                effective_role TEXT,
+                effective_student_id TEXT,
+                user_id INTEGER,
+                username TEXT,
+                role TEXT,
+                query_text TEXT,
+                action TEXT NOT NULL,
+                endpoint TEXT NOT NULL,
+                detail TEXT,
+                sources TEXT,
+                status TEXT DEFAULT 'success',
+                ip_address TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_number TEXT UNIQUE NOT NULL,
+                creator_id INTEGER NOT NULL,
+                creator_username TEXT NOT NULL,
+                creator_role TEXT NOT NULL,
+                target_role TEXT NOT NULL,
+                category TEXT NOT NULL,
+                priority TEXT DEFAULT 'medium',
+                status TEXT DEFAULT 'open',
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                student_id TEXT,
+                assigned_to_id INTEGER,
+                assigned_to_username TEXT,
+                resolution_notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ticket_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                sender_id INTEGER NOT NULL,
+                sender_username TEXT NOT NULL,
+                sender_role TEXT NOT NULL,
+                message TEXT NOT NULL,
+                is_internal_note INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(ticket_id) REFERENCES tickets(id) ON DELETE CASCADE
+            );
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS student_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                gender TEXT DEFAULT 'Other',
+                location TEXT DEFAULT 'Campus',
+                specialization TEXT DEFAULT 'Computer Science',
+                cgpa REAL DEFAULT 0.0,
+                backlogs INTEGER DEFAULT 0,
+                internships INTEGER DEFAULT 0,
+                placement_status TEXT DEFAULT 'Eligible',
+                placed_company TEXT DEFAULT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
     conn.commit()
 
     # Migration check for existing audit_logs columns
-    cur.execute("PRAGMA table_info(audit_logs);")
-    existing_cols = {row[1] for row in cur.fetchall()}
+    if is_pg:
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'audit_logs';")
+        existing_cols = {row[0].lower() for row in cur.fetchall()}
+    else:
+        cur.execute("PRAGMA table_info(audit_logs);")
+        existing_cols = {row[1].lower() for row in cur.fetchall()}
+
     columns_to_add = [
         ("actor_user_id", "INTEGER"),
         ("actor_username", "TEXT"),

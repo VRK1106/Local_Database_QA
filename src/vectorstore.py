@@ -22,7 +22,15 @@ sqlite3.connect = _patched_connect
 import chromadb
 from chromadb.api import ClientAPI
 from chromadb.api.models.Collection import Collection
-from src.config import CHROMA_COLLECTION, CHROMA_DB_PATH, DOCUMENTS_DIR
+from src.config import (
+    CHROMA_COLLECTION,
+    CHROMA_DB_PATH,
+    DOCUMENTS_DIR,
+    CHROMA_SERVER_HOST,
+    CHROMA_SERVER_HTTP_PORT,
+    CHROMA_SERVER_SSL,
+    CHROMA_SERVER_AUTH_CREDENTIALS
+)
 
 _chroma_lock = threading.RLock()
 _client_instance = None
@@ -31,11 +39,21 @@ _stats_cache_time = 0.0
 
 
 def get_client() -> ClientAPI:
-    """Return persistent ChromaDB client instance."""
+    """Return persistent or remote ChromaDB client instance."""
     global _client_instance
     with _chroma_lock:
         if _client_instance is None:
-            _client_instance = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+            if CHROMA_SERVER_HOST:
+                print(f"[VECTORSTORE] Initializing ChromaDB HttpClient -> {CHROMA_SERVER_HOST}:{CHROMA_SERVER_HTTP_PORT} (SSL={CHROMA_SERVER_SSL})")
+                headers = {"Authorization": f"Bearer {CHROMA_SERVER_AUTH_CREDENTIALS}"} if CHROMA_SERVER_AUTH_CREDENTIALS else None
+                _client_instance = chromadb.HttpClient(
+                    host=CHROMA_SERVER_HOST,
+                    port=CHROMA_SERVER_HTTP_PORT,
+                    ssl=CHROMA_SERVER_SSL,
+                    headers=headers
+                )
+            else:
+                _client_instance = chromadb.PersistentClient(path=CHROMA_DB_PATH)
     return _client_instance
 
 

@@ -1,13 +1,13 @@
-"""Ollama Local LLM API Client: Model discovery, RAG prompt generation, streaming response handling."""
+"""Ollama Local LLM API Client: Model discovery, RAG prompt generation, streaming response handling using httpx."""
 
 from __future__ import annotations
 import json
-import requests
-from typing import Generator
+import time
+from typing import Generator, AsyncGenerator
+import httpx
+
 from src.config import OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL
 
-
-import time
 
 _models_cache = None
 _models_cache_time = 0.0
@@ -25,18 +25,19 @@ def list_ollama_models() -> list[str]:
 
     try:
         url = f"{OLLAMA_BASE_URL}/api/tags"
-        resp = requests.get(url, timeout=0.5)
-        if resp.status_code == 200:
-            data = resp.json()
-            models = [m.get("name") for m in data.get("models", []) if m.get("name")]
-            if models:
-                sorted_models = sorted(models)
-                # Ensure DEFAULT_OLLAMA_MODEL or qwen2.5-coder is placed first if present
-                pref_matches = [m for m in sorted_models if DEFAULT_OLLAMA_MODEL in m or "qwen2.5-coder" in m]
-                other_models = [m for m in sorted_models if m not in pref_matches]
-                _models_cache = pref_matches + other_models
-                _models_cache_time = now
-                return _models_cache
+        with httpx.Client(timeout=0.5) as client:
+            resp = client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                models = [m.get("name") for m in data.get("models", []) if m.get("name")]
+                if models:
+                    sorted_models = sorted(models)
+                    # Ensure DEFAULT_OLLAMA_MODEL or qwen2.5-coder is placed first if present
+                    pref_matches = [m for m in sorted_models if DEFAULT_OLLAMA_MODEL in m or "qwen2.5-coder" in m]
+                    other_models = [m for m in sorted_models if m not in pref_matches]
+                    _models_cache = pref_matches + other_models
+                    _models_cache_time = now
+                    return _models_cache
     except Exception:
         pass
 
@@ -55,8 +56,28 @@ def check_ollama_health() -> bool:
 
     try:
         url = f"{OLLAMA_BASE_URL}/api/tags"
-        resp = requests.get(url, timeout=0.5)
-        _health_cache = (resp.status_code == 200)
+        with httpx.Client(timeout=0.5) as client:
+            resp = client.get(url)
+            _health_cache = (resp.status_code == 200)
+    except Exception:
+        _health_cache = False
+
+    _health_cache_time = now
+    return _health_cache
+
+
+async def check_ollama_health_async() -> bool:
+    """Asynchronously check if Ollama service is reachable on localhost using httpx.AsyncClient."""
+    global _health_cache, _health_cache_time
+    now = time.time()
+    if _health_cache is not None and (now - _health_cache_time) < 15.0:
+        return _health_cache
+
+    try:
+        url = f"{OLLAMA_BASE_URL}/api/tags"
+        async with httpx.AsyncClient(timeout=0.5) as client:
+            resp = await client.get(url)
+            _health_cache = (resp.status_code == 200)
     except Exception:
         _health_cache = False
 
@@ -109,7 +130,7 @@ def generate_ollama_answer(
     system_instruction: str | None = None,
     temperature: float = 0.0
 ) -> str:
-    """Send synchronous request to Ollama and return complete answer text."""
+    """Send request to Ollama using httpx and return complete answer text."""
     url = f"{OLLAMA_BASE_URL}/api/generate"
     payload = {
         "model": model_name,
@@ -124,12 +145,47 @@ def generate_ollama_answer(
         payload["system"] = system_instruction
 
     try:
-        resp = requests.post(url, json=payload, timeout=300.0)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get("response", "").strip()
-        else:
-            return f"Ollama API Error (Status {resp.status_code}): {resp.text}"
+        timeout = httpx.Timeout(300.0, connect=10.0)
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("response", "").strip()
+            else:
+                return f"Ollama API Error (Status {resp.status_code}): {resp.text}"
+    except Exception as e:
+        return f"Could not connect to Ollama model '{model_name}': {e}. Note: First-time model loading can take up to 60s. Ensure Ollama is running locally."
+
+
+async def generate_ollama_answer_async(
+    prompt: str,
+    model_name: str,
+    system_instruction: str | None = None,
+    temperature: float = 0.0
+) -> str:
+    """Send asynchronous request to Ollama using httpx.AsyncClient and return complete answer text."""
+    url = f"{OLLAMA_BASE_URL}/api/generate"
+    payload = {
+        "model": model_name,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.0,
+            "top_p": 0.9
+        }
+    }
+    if system_instruction:
+        payload["system"] = system_instruction
+
+    try:
+        timeout = httpx.Timeout(300.0, connect=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("response", "").strip()
+            else:
+                return f"Ollama API Error (Status {resp.status_code}): {resp.text}"
     except Exception as e:
         return f"Could not connect to Ollama model '{model_name}': {e}. Note: First-time model loading can take up to 60s. Ensure Ollama is running locally."
 
@@ -140,7 +196,7 @@ def generate_ollama_stream(
     system_instruction: str | None = None,
     temperature: float = 0.0
 ) -> Generator[str, None, None]:
-    """Stream token chunks from Ollama API as Server-Sent Events (SSE)."""
+    """Stream token chunks from Ollama API as Server-Sent Events (SSE) using httpx."""
     url = f"{OLLAMA_BASE_URL}/api/generate"
     payload = {
         "model": model_name,
@@ -155,21 +211,66 @@ def generate_ollama_stream(
         payload["system"] = system_instruction
 
     try:
-        resp = requests.post(url, json=payload, stream=True, timeout=300.0)
-        if resp.status_code != 200:
-            yield f"data: {json.dumps({'error': f'Ollama API HTTP {resp.status_code}'})}\n\n"
-            return
+        timeout = httpx.Timeout(300.0, connect=10.0)
+        with httpx.Client(timeout=timeout) as client:
+            with client.stream("POST", url, json=payload) as resp:
+                if resp.status_code != 200:
+                    yield f"data: {json.dumps({'error': f'Ollama API HTTP {resp.status_code}'})}\n\n"
+                    return
 
-        for line in resp.iter_lines():
-            if line:
-                try:
-                    chunk = json.loads(line.decode("utf-8"))
-                    text = chunk.get("response", "")
-                    done = chunk.get("done", False)
-                    yield f"data: {json.dumps({'token': text, 'done': done})}\n\n"
-                    if done:
-                        break
-                except Exception:
-                    continue
+                for line in resp.iter_lines():
+                    if line:
+                        try:
+                            chunk = json.loads(line)
+                            text = chunk.get("response", "")
+                            done = chunk.get("done", False)
+                            yield f"data: {json.dumps({'token': text, 'done': done})}\n\n"
+                            if done:
+                                break
+                        except Exception:
+                            continue
+    except Exception as e:
+        yield f"data: {json.dumps({'error': f'Model {model_name} timed out or failed: {e}'})}\n\n"
+
+
+async def generate_ollama_stream_async(
+    prompt: str,
+    model_name: str,
+    system_instruction: str | None = None,
+    temperature: float = 0.0
+) -> AsyncGenerator[str, None]:
+    """Stream token chunks asynchronously from Ollama API as SSE using httpx.AsyncClient."""
+    url = f"{OLLAMA_BASE_URL}/api/generate"
+    payload = {
+        "model": model_name,
+        "prompt": prompt,
+        "stream": True,
+        "options": {
+            "temperature": 0.0,
+            "top_p": 0.9
+        }
+    }
+    if system_instruction:
+        payload["system"] = system_instruction
+
+    try:
+        timeout = httpx.Timeout(300.0, connect=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("POST", url, json=payload) as resp:
+                if resp.status_code != 200:
+                    yield f"data: {json.dumps({'error': f'Ollama API HTTP {resp.status_code}'})}\n\n"
+                    return
+
+                async for line in resp.aiter_lines():
+                    if line:
+                        try:
+                            chunk = json.loads(line)
+                            text = chunk.get("response", "")
+                            done = chunk.get("done", False)
+                            yield f"data: {json.dumps({'token': text, 'done': done})}\n\n"
+                            if done:
+                                break
+                        except Exception:
+                            continue
     except Exception as e:
         yield f"data: {json.dumps({'error': f'Model {model_name} timed out or failed: {e}'})}\n\n"
