@@ -29,9 +29,13 @@ services:
       - PORT=5000
       - WAITRESS_THREADS=16
       - APP_SECRET_KEY=amypo-production-secret-key-change-in-env
-    # Only the application gateway exposes its port to the host / public internet
+    # -------------------------------------------------------------------------
+    # SECURITY LOCKDOWN: Only the FastAPI application gateway binds to the host.
+    # All database and vector services (Postgres, ChromaDB) are strictly unmapped,
+    # preventing external actors from bypassing the RBAC and data isolation layers.
+    # -------------------------------------------------------------------------
     ports:
-      - "5000:5000"
+      - "${HOST_PORT:-5000}:5000"
     networks:
       internal_network:
         aliases:
