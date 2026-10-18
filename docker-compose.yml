@@ -11,11 +11,15 @@ services:
     container_name: amypo_backend
     restart: unless-stopped
     depends_on:
+      postgres:
+        condition: service_healthy
       chromadb:
         condition: service_healthy
       ollama:
         condition: service_healthy
     environment:
+      # Relational PostgreSQL Database Connection
+      - DATABASE_URL=postgresql://amypo_user:amypo_secure_password_2026@postgres:5432/amypo_db
       # Internal Docker DNS service resolution
       - OLLAMA_BASE_URL=http://ollama:11434
       - CHROMA_SERVER_HOST=chromadb
@@ -44,7 +48,36 @@ services:
       start_period: 15s
 
   # ---------------------------------------------------------------------------
-  # 2. Dedicated ChromaDB Vector Server (Client/Server Mode)
+  # 2. Dedicated PostgreSQL Relational Database Service
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: amypo_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=amypo_user
+      - POSTGRES_PASSWORD=amypo_secure_password_2026
+      - POSTGRES_DB=amypo_db
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    # Internal port exposure ONLY: No host port binding prevents external internet access
+    expose:
+      - "5432"
+    networks:
+      internal_network:
+        aliases:
+          - postgres
+          - db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amypo_user -d amypo_db || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # 3. Dedicated ChromaDB Vector Server (Client/Server Mode)
   # ---------------------------------------------------------------------------
   chromadb:
     image: chromadb/chroma:latest
@@ -71,7 +104,7 @@ services:
       start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # 3. Local Ollama LLM Inference Server
+  # 4. Local Ollama LLM Inference Server
   # ---------------------------------------------------------------------------
   ollama:
     image: ollama/ollama:latest
@@ -102,9 +135,12 @@ networks:
     driver: bridge
 
 # ---------------------------------------------------------------------------
-# Mounted Persistent Volumes (Decoupled State)
+# Explicit Named Docker Volumes (No Host Paths)
+# Embeddings, relational database, LLM weights, and documents persist across teardowns
 # ---------------------------------------------------------------------------
 volumes:
+  postgres_data:
+    name: amypo_postgres_data
   chroma_data:
     name: amypo_chroma_data
   ollama_data:
