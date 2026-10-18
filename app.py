@@ -1,7 +1,7 @@
 import os
 try:
     import pyautogui
-except ImportError:
+except Exception:
     pyautogui = None
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -1273,9 +1273,9 @@ def stream_async_generator(async_gen_func, *args, **kwargs):
 
 @app.route('/health', methods=['GET'])
 @app.route('/api/health', methods=['GET'])
-async def health_check():
+def health_check():
     """
-    Lightweight, asynchronous orchestrator health-check ping endpoint.
+    Lightweight, non-blocking orchestrator health-check ping endpoint.
     Guaranteed to respond immediately (< 1ms) to Kubernetes / Docker / AWS ECS probes without starving or blocking.
     """
     return jsonify({
