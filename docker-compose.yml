@@ -18,10 +18,11 @@ services:
       ollama:
         condition: service_healthy
     environment:
-      # Relational PostgreSQL Database Connection
+      # Relational PostgreSQL Database Connection (resolved via internal DNS 'postgres')
       - DATABASE_URL=postgresql://amypo_user:amypo_secure_password_2026@postgres:5432/amypo_db
-      # Internal Docker DNS service resolution
+      # Internal Docker DNS service resolution (service names, NOT hardcoded IPs)
       - OLLAMA_BASE_URL=http://ollama:11434
+      - CHROMA_SERVER_URL=http://chromadb:8000
       - CHROMA_SERVER_HOST=chromadb
       - CHROMA_SERVER_HTTP_PORT=8000
       - CHROMA_COLLECTION=local_qa_collection

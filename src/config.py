@@ -8,11 +8,31 @@ VECTOR_DB_DIR = BASE_DIR / 'vector_db'
 DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True) 
 VECTOR_DB_DIR.mkdir(parents=True, exist_ok=True) 
 
+from urllib.parse import urlparse
+
 # ChromaDB Server / Persistence Configuration
-# If CHROMA_SERVER_HOST is set, the application connects to a dedicated ChromaDB server over HTTP/HTTPS
-CHROMA_SERVER_HOST = os.environ.get('CHROMA_SERVER_HOST', '').strip() or None
-CHROMA_SERVER_HTTP_PORT = int(os.environ.get('CHROMA_SERVER_HTTP_PORT', 8000))
-CHROMA_SERVER_SSL = os.environ.get('CHROMA_SERVER_SSL', 'false').lower() == 'true'
+# If CHROMA_SERVER_HOST or CHROMA_SERVER_URL is set, the application connects to a dedicated ChromaDB server over HTTP/HTTPS
+CHROMA_SERVER_URL = os.environ.get('CHROMA_SERVER_URL', '').strip()
+if CHROMA_SERVER_URL:
+    _chroma_parsed = urlparse(CHROMA_SERVER_URL)
+    CHROMA_SERVER_HOST = _chroma_parsed.hostname
+    CHROMA_SERVER_HTTP_PORT = _chroma_parsed.port or (443 if _chroma_parsed.scheme == 'https' else 8000)
+    CHROMA_SERVER_SSL = _chroma_parsed.scheme == 'https'
+else:
+    _raw_host = os.environ.get('CHROMA_SERVER_HOST', '').strip()
+    if _raw_host.startswith(('http://', 'https://')):
+        _chroma_parsed = urlparse(_raw_host)
+        CHROMA_SERVER_HOST = _chroma_parsed.hostname
+        CHROMA_SERVER_HTTP_PORT = _chroma_parsed.port or (443 if _chroma_parsed.scheme == 'https' else 8000)
+        CHROMA_SERVER_SSL = _chroma_parsed.scheme == 'https'
+    else:
+        CHROMA_SERVER_HOST = _raw_host or None
+        CHROMA_SERVER_HTTP_PORT = int(os.environ.get('CHROMA_SERVER_HTTP_PORT', 8000))
+        CHROMA_SERVER_SSL = os.environ.get('CHROMA_SERVER_SSL', 'false').lower() == 'true'
+
+if CHROMA_SERVER_HOST:
+    CHROMA_SERVER_URL = f"{'https' if CHROMA_SERVER_SSL else 'http'}://{CHROMA_SERVER_HOST}:{CHROMA_SERVER_HTTP_PORT}"
+
 CHROMA_SERVER_AUTH_CREDENTIALS = os.environ.get('CHROMA_SERVER_AUTH_CREDENTIALS', None)
 
 CHROMA_DB_PATH = str(VECTOR_DB_DIR) 
