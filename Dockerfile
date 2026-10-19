@@ -2,10 +2,17 @@
 FROM python:3.10-slim
 
 # Prevent Python from writing .pyc files and buffer stdout/stderr
+# Configure glibc memory arena limits and math library threads to prevent memory bloat
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TOKENIZERS_PARALLELISM=false \
-    TF_CPP_MIN_LOG_LEVEL=3
+    TF_CPP_MIN_LOG_LEVEL=3 \
+    MALLOC_ARENA_MAX=2 \
+    PYTHONMALLOC=malloc \
+    OMP_NUM_THREADS=2 \
+    OPENBLAS_NUM_THREADS=2 \
+    MKL_NUM_THREADS=2 \
+    NUMEXPR_NUM_THREADS=2
 
 WORKDIR /app
 

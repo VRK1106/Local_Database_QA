@@ -11,9 +11,27 @@ from io import BytesIO, StringIO
 from pathlib import Path
 
 
-def file_hash(data: bytes) -> str:
-    """Return SHA-256 hash of file content for deduplication."""
-    return hashlib.sha256(data).hexdigest()
+from src.memory_utils import trim_memory
+
+
+def file_hash(data_or_stream: bytes | BytesIO | Path | str) -> str:
+    """Compute SHA-256 hash in 64KB chunks to maintain O(1) memory footprint."""
+    hasher = hashlib.sha256()
+    if isinstance(data_or_stream, (str, Path)):
+        with open(data_or_stream, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                hasher.update(chunk)
+    elif isinstance(data_or_stream, (bytes, bytearray)):
+        hasher.update(data_or_stream)
+    elif hasattr(data_or_stream, "read"):
+        pos = data_or_stream.tell() if hasattr(data_or_stream, "tell") else 0
+        for chunk in iter(lambda: data_or_stream.read(65536), b""):
+            hasher.update(chunk)
+        if hasattr(data_or_stream, "seek"):
+            data_or_stream.seek(pos)
+    else:
+        hasher.update(bytes(data_or_stream))
+    return hasher.hexdigest()
 
 
 def extract_text_from_pdf(stream: BytesIO) -> list[dict]:
@@ -302,22 +320,23 @@ def extract_text_from_txt(stream: BytesIO) -> list[dict]:
 def extract_pages(stream: BytesIO, filename: str) -> list[dict]:
     """Extract pages/text blocks based on file extension, including Excel, SQL, and NoSQL databases."""
     ext = Path(filename).suffix.lower()
-    if ext == ".pdf":
-        return extract_text_from_pdf(stream)
-    elif ext in [".docx", ".doc"]:
-        return extract_text_from_docx(stream)
-    elif ext in [".xlsx", ".xls", ".xlsm"]:
-        return extract_text_from_excel(stream, filename)
-    elif ext in [".db", ".sqlite", ".sqlite3"]:
-        return extract_text_from_sqlite(stream, filename)
-    elif ext == ".sql":
-        return extract_text_from_sql_dump(stream, filename)
-    elif ext in [".json", ".jsonl"]:
-        return extract_text_from_nosql_json(stream, filename)
-    elif ext in [".txt", ".md", ".csv"]:
-        return extract_text_from_txt(stream)
-    else:
-        return extract_text_from_txt(stream)
+    try:
+        if ext == ".pdf":
+            return extract_text_from_pdf(stream)
+        elif ext in [".docx", ".doc"]:
+            return extract_text_from_docx(stream)
+        elif ext in [".xlsx", ".xls", ".xlsm"]:
+            return extract_text_from_excel(stream, filename)
+        elif ext in [".db", ".sqlite", ".sqlite3"]:
+            return extract_text_from_sqlite(stream, filename)
+        elif ext == ".sql":
+            return extract_text_from_sql_dump(stream, filename)
+        elif ext in [".json", ".jsonl"]:
+            return extract_text_from_nosql_json(stream, filename)
+        else:
+            return extract_text_from_txt(stream)
+    finally:
+        trim_memory()
 
 
 def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chunk_overlap: int = 50, visibility: str = "internal") -> list[dict]:

@@ -1285,6 +1285,28 @@ def health_check():
     }), 200
 
 
+@app.route('/api/system/memory', methods=['GET', 'POST'])
+@login_required
+@permission_required("system.config")
+def api_system_memory():
+    """Report process resident memory and allow on-demand garbage collection and malloc trimming."""
+    from src.memory_utils import trim_memory, get_process_memory_mb
+    if request.method == 'POST':
+        collected = trim_memory()
+        mem = get_process_memory_mb()
+        return jsonify({"status": "trimmed", "objects_collected": collected, **mem})
+    return jsonify(get_process_memory_mb())
+
+
+@app.after_request
+def auto_memory_maintenance(response):
+    """Automatically trim glibc heap after memory-intensive mutation operations."""
+    if request.path in ('/api/upload', '/api/reset_db', '/api/verify_trust') or request.method in ('POST', 'DELETE'):
+        from src.memory_utils import trim_memory
+        trim_memory()
+    return response
+
+
 @app.route('/api/stream_query', methods=['POST'])
 @login_required
 def api_stream_query():

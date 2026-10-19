@@ -1,6 +1,6 @@
 services:
   # ---------------------------------------------------------------------------
-  # 1. FastAPI / AMYPO Backend Application
+  # 1. FastAPI / AMYPO Backend Application (Tuned Memory & glibc Arenas)
   # ---------------------------------------------------------------------------
   backend:
     build:
@@ -27,7 +27,8 @@ services:
       - DEFAULT_OLLAMA_MODEL=qwen2.5-coder:latest
       - EMBEDDING_MODEL_NAME=BAAI/bge-small-en-v1.5
       - PORT=5000
-      - WAITRESS_THREADS=16
+      # Lean worker thread allocation: 4 threads prevent glibc thread arena sprawl
+      - WAITRESS_THREADS=4
       - APP_SECRET_KEY=amypo-production-secret-key-change-in-env
     # -------------------------------------------------------------------------
     # SECURITY LOCKDOWN: Only the FastAPI application gateway binds to the host.
@@ -43,6 +44,14 @@ services:
           - backend
     volumes:
       - documents_data:/app/documents
+    # Explicit container resource boundaries (prevents memory starvation)
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: '2.0'
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
       interval: 15s
@@ -51,12 +60,19 @@ services:
       start_period: 15s
 
   # ---------------------------------------------------------------------------
-  # 2. Dedicated PostgreSQL Relational Database Service
+  # 2. Dedicated PostgreSQL Relational Database Service (Tuned Buffer Pools)
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:15-alpine
     container_name: amypo_postgres
     restart: unless-stopped
+    command: >
+      postgres
+      -c shared_buffers=32MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=16MB
+      -c max_connections=40
+      -c effective_cache_size=128MB
     environment:
       - POSTGRES_USER=amypo_user
       - POSTGRES_PASSWORD=amypo_secure_password_2026
@@ -72,6 +88,12 @@ services:
           - db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U amypo_user -d amypo_db || exit 1"]
       interval: 10s
@@ -80,7 +102,7 @@ services:
       start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # 3. Dedicated ChromaDB Vector Server (Client/Server Mode)
+  # 3. Dedicated ChromaDB Vector Server (Bounded Segment Caches)
   # ---------------------------------------------------------------------------
   chromadb:
     image: chromadb/chroma:latest
@@ -90,6 +112,7 @@ services:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
       - PERSIST_DIRECTORY=/chroma/chroma
+      - CHROMA_SEGMENT_CACHE_POLICY=LRU
     # Internal port exposure ONLY: No host port binding prevents external internet access
     expose:
       - "8000"
@@ -99,6 +122,12 @@ services:
           - chromadb
     volumes:
       - chroma_data:/chroma/chroma
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 64M
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8000"]
       interval: 10s
@@ -107,7 +136,7 @@ services:
       start_period: 10s
 
   # ---------------------------------------------------------------------------
-  # 4. Local Ollama LLM Inference Server (GPU Accelerated - RTX 4050)
+  # 4. Local Ollama LLM Inference Server (GPU Accelerated & Memory Capped)
   # ---------------------------------------------------------------------------
   ollama:
     image: ollama/ollama:latest
@@ -116,6 +145,10 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Memory Optimization: Limit parallel streams and unload idle models after 5m
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KEEP_ALIVE=5m
     # Internal port exposure ONLY: No host port binding prevents external internet access
     expose:
       - "11434"
@@ -125,10 +158,12 @@ services:
           - ollama
     volumes:
       - ollama_data:/root/.ollama
-    # GPU Access: Pass RTX 4050 to Ollama container via NVIDIA Container Toolkit / WSL2 CUDA
     deploy:
       resources:
+        limits:
+          memory: 6144M
         reservations:
+          memory: 512M
           devices:
             - driver: nvidia
               count: all

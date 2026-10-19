@@ -86,7 +86,7 @@ def ingested_hashes() -> set[str]:
             for f in doc_dir.iterdir():
                 if f.is_file() and not f.name.startswith('.'):
                     try:
-                        hashes.add(file_hash(f.read_bytes()))
+                        hashes.add(file_hash(f))
                     except Exception:
                         pass
     except Exception as ex:
@@ -119,6 +119,8 @@ def add_chunks(chunks: list[dict], embeddings: list[list[float]], file_hash: str
                 embeddings=embeddings,
             )
             invalidate_stats_cache()
+            from src.memory_utils import trim_memory
+            trim_memory()
             return len(ids)
         except Exception as e:
             print(f"[ERROR] Failed to upsert chunks: {e}")
