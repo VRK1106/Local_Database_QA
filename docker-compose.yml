@@ -111,7 +111,7 @@ services:
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
-      - PERSIST_DIRECTORY=/chroma/chroma
+      - PERSIST_DIRECTORY=/data
       - CHROMA_SEGMENT_CACHE_POLICY=LRU
     # Internal port exposure ONLY: No host port binding prevents external internet access
     expose:
@@ -121,7 +121,7 @@ services:
         aliases:
           - chromadb
     volumes:
-      - chroma_data:/chroma/chroma
+      - chroma_data:/data
     deploy:
       resources:
         limits:

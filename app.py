@@ -138,6 +138,63 @@ app.cli.add_command(create_developer_cmd)
 init_auth_db()
 seed_student_records_from_documents(DOCUMENTS_DIR)
 
+
+def auto_sync_startup():
+    """Ensure relational data and vector documents are fully populated and synced on startup."""
+    try:
+        from src.config import USE_POSTGRES, DATABASE_URL, AUTH_DB_PATH, DOCUMENTS_DIR
+        # 1. If using PostgreSQL and student records are empty, auto-migrate from auth.db
+        if USE_POSTGRES and Path(AUTH_DB_PATH).exists():
+            from src.auth import get_db_connection
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM student_records;")
+            count = cur.fetchone()[0]
+            conn.close()
+            if count == 0:
+                print("[STARTUP] PostgreSQL database is empty. Auto-migrating from SQLite auth.db...")
+                try:
+                    from migrate_sqlite_to_postgres import migrate
+                    migrate(Path(AUTH_DB_PATH), DATABASE_URL)
+                except Exception as me:
+                    print(f"[STARTUP] Migration warning: {me}")
+
+        # 2. Sync any unindexed documents in DOCUMENTS_DIR into ChromaDB
+        from src.vectorstore import get_collection, add_chunks, ingested_hashes
+        from src.ingest import extract_pages, chunk_pages, file_hash
+        from src.embeddings import embed_documents
+        from io import BytesIO
+
+        collection = get_collection()
+        if collection and Path(DOCUMENTS_DIR).exists():
+            known = ingested_hashes()
+            for doc_file in Path(DOCUMENTS_DIR).iterdir():
+                if not doc_file.is_file() or doc_file.name.startswith('.'):
+                    continue
+                try:
+                    digest = file_hash(doc_file)
+                    if digest in known:
+                        continue
+                    content = doc_file.read_bytes()
+                    pages = extract_pages(BytesIO(content), doc_file.name)
+                    if not pages:
+                        continue
+                    visibility = "internal" if any(w in doc_file.name.lower() for w in ("internal", "memo", "private", "confidential")) else "public"
+                    chunks = chunk_pages(pages, doc_file.name, visibility=visibility)
+                    if not chunks:
+                        continue
+                    embeddings = embed_documents([c["text"] for c in chunks])
+                    add_chunks(chunks, embeddings, digest)
+                    known.add(digest)
+                    print(f"[STARTUP] Auto-indexed {len(chunks)} chunks from '{doc_file.name}'.")
+                except Exception as e:
+                    print(f"[STARTUP] Warning: Could not index '{doc_file.name}': {e}")
+    except Exception as ex:
+        print(f"[STARTUP] Notice: auto_sync_startup skipped: {ex}")
+
+
+auto_sync_startup()
+
 # Setup Flask-Login session manager
 login_manager = LoginManager()
 login_manager.init_app(app)
