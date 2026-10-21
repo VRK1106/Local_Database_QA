@@ -1551,13 +1551,18 @@
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
 
-                const lines = buffer.split("\n\n");
-                buffer = lines.pop(); // Keep partial line in buffer
+                buffer = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                const parts = buffer.split('\n\n');
+                buffer = parts.pop();
 
-                for (const line of lines) {
-                    if (line.startsWith("data: ")) {
-                        try {
-                            const data = JSON.parse(line.replace("data: ", ""));
+                for (const part of parts) {
+                    const lines = part.split('\n');
+                    for (const rawLine of lines) {
+                        const line = rawLine.trim();
+                        if (!line || line.startsWith(':')) continue;
+                        if (line.startsWith('data:')) {
+                            try {
+                                const data = JSON.parse(line.substring(5).trim());
                             
                             // Context Citations Event
                             if (data.type === 'context') {
@@ -1626,7 +1631,7 @@
                             }
 
                             if (data.error) {
-                                answerTextDiv.innerHTML += `<p style="color: var(--accent-rose);">Error: ${data.error}</p>`;
+                                answerTextDiv.innerHTML = `<div class="status-badge" style="background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3); padding: 10px 14px; border-radius: 8px;"><i class="fa-solid fa-circle-exclamation"></i> <strong>Error:</strong> ${data.error}</div>`;
                             }
                         } catch (err) {
                             console.error("Parse error:", err);

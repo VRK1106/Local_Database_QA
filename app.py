@@ -1420,7 +1420,7 @@ def api_stream_query():
         ip_address=request.remote_addr
     )
 
-    async def async_event_stream():
+    def event_stream():
         # Flush immediate SSE comment so Cloudflare / reverse proxies immediately open the stream
         yield ": ping\n\n"
         try:
@@ -1435,12 +1435,11 @@ def api_stream_query():
                         "You may ask questions about placement eligibility criteria, company visit schedules, "
                         "or your personal placement profile."
                     )
-                    yield f"data: {json.dumps({'type': 'context', 'citations': []})}\n\n"
-                    yield f"data: {json.dumps({'token': notice_msg})}\n\n"
+                    yield f"data: {json.dumps({'type': 'context', 'citations': []}, default=str)}\n\n"
+                    yield f"data: {json.dumps({'token': notice_msg}, default=str)}\n\n"
                     return
 
-                res = await run_in_threadpool(
-                    execute_student_scoped_query,
+                res = execute_student_scoped_query(
                     query=query,
                     student_id=scope_bound_student_id,
                     documents_dir=DOCUMENTS_DIR,
@@ -1460,7 +1459,7 @@ def api_stream_query():
 
                 if final_prompt:
                     yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']}, default=str)}\n\n"
-                    async for stream_chunk in generate_ollama_stream_async(prompt=final_prompt, model_name=model):
+                    for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
                         yield stream_chunk
                     yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}}, default=str)}\n\n"
                     return
@@ -1468,9 +1467,8 @@ def api_stream_query():
                 # Semantic Vector Search: Strictly visibility='public'
                 context_chunks = []
                 if mode == 'rag':
-                    query_vec = await run_in_threadpool(embed_query, query)
-                    context_chunks = await run_in_threadpool(
-                        search,
+                    query_vec = embed_query(query)
+                    context_chunks = search(
                         query_embedding=query_vec,
                         top_k=top_k,
                         source_filters=sources if sources else None,
@@ -1484,7 +1482,7 @@ def api_stream_query():
                     prompt = query
                     yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []}, default=str)}\n\n"
 
-                async for stream_chunk in generate_ollama_stream_async(prompt=prompt, model_name=model):
+                for stream_chunk in generate_ollama_stream(prompt=prompt, model_name=model):
                     yield stream_chunk
                 return
 
@@ -1492,8 +1490,7 @@ def api_stream_query():
             # Path B: Placement Officer & Developer Scope (Full Administrative Reach)
             # -------------------------------------------------------------
             if mode == 'rag' and is_aggregate_query(query):
-                final_prompt, sql_q, sql_res, citations = await run_in_threadpool(
-                    execute_universal_structured_query,
+                final_prompt, sql_q, sql_res, citations = execute_universal_structured_query(
                     query=query,
                     documents_dir=DOCUMENTS_DIR,
                     selected_sources=sources if sources else None,
@@ -1501,16 +1498,15 @@ def api_stream_query():
                 )
                 if final_prompt:
                     yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']}, default=str)}\n\n"
-                    async for stream_chunk in generate_ollama_stream_async(prompt=final_prompt, model_name=model):
+                    for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
                         yield stream_chunk
                     yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}}, default=str)}\n\n"
                     return
 
             context_chunks = []
             if mode == 'rag':
-                query_vec = await run_in_threadpool(embed_query, query)
-                context_chunks = await run_in_threadpool(
-                    search,
+                query_vec = embed_query(query)
+                context_chunks = search(
                     query_embedding=query_vec,
                     top_k=top_k,
                     source_filters=sources if sources else None
@@ -1530,13 +1526,13 @@ def api_stream_query():
                 prompt = query
                 yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []}, default=str)}\n\n"
 
-            async for stream_chunk in generate_ollama_stream_async(prompt=prompt, model_name=model):
+            for stream_chunk in generate_ollama_stream(prompt=prompt, model_name=model):
                 yield stream_chunk
 
         except Exception as e:
             yield f"data: {json.dumps({'error': f'Streaming backend error: {str(e)}'}, default=str)}\n\n"
 
-    response = Response(stream_with_context(stream_async_generator(async_event_stream)), mimetype="text/event-stream")
+    response = Response(stream_with_context(event_stream()), mimetype="text/event-stream")
     response.headers['Cache-Control'] = 'no-cache, no-transform'
     response.headers['X-Accel-Buffering'] = 'no'
     return response
