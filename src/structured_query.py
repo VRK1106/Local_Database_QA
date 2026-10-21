@@ -458,7 +458,32 @@ def execute_student_scoped_query(query: str, student_id: str, documents_dir: Pat
         f"2. If the student asks about any other student, their classmates' CGPA, ranks, or aggregate university statistics, strictly refuse and inform them that cross-student records are confidential.\n"
         f"3. Provide a helpful, clear, precise, and reassuring response answering the student's question directly based strictly on their official record and any attached public circulars above."
     )
-    return final_prompt, safe_sql, [row], citations
+
+    # 4. Instant Profile Resolution (Zero-Latency Fast Path):
+    # If the student's query is asking exclusively about their personal verified metrics (CGPA, placement status,
+    # backlogs, branch) without requiring RAG synthesis over circulars or recruitment drives, resolve deterministically in < 1ms.
+    instant_answer = None
+    if not public_context and student_record:
+        name = student_record.get("name", student_id)
+        cgpa = student_record.get("CGPA") or student_record.get("cgpa", "—")
+        status = student_record.get("Placed_Company") or student_record.get("placement_status", "Not Placed")
+        dept = student_record.get("Branch") or student_record.get("specialization", "Computer Science")
+        backlogs = student_record.get("Backlogs", student_record.get("backlogs", 0))
+        
+        status_badge = f"**{status}**" if status not in ("Not Placed", "None", "") else "**Not Placed** *(Eligible for upcoming recruitment drives)*"
+        backlog_badge = f"{backlogs} *(Clear academic record)*" if str(backlogs) in ("0", "None") else f"**{backlogs} active backlogs**"
+        
+        instant_answer = (
+            f"Hello **{name}** (`{student_id}`),\n\n"
+            f"Here is your verified academic and placement status directly from the official registry:\n\n"
+            f"- **Cumulative GPA (CGPA):** **{cgpa}** / 10.0\n"
+            f"- **Placement Status:** {status_badge}\n"
+            f"- **Department / Branch:** {dept}\n"
+            f"- **Active Backlogs:** {backlog_badge}\n\n"
+            f"> *Tip: You can query upcoming company eligibility criteria and schedules by selecting circulars under **Target Documents**.*"
+        )
+
+    return final_prompt, safe_sql, [row], citations, instant_answer
 
 
 def get_student_record(student_id: str, documents_dir: Path) -> dict | None:

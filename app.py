@@ -956,13 +956,23 @@ def index():
                 )
                 results = []
             else:
-                final_prompt, sql_q, sql_res, citations = execute_student_scoped_query(
+                res = execute_student_scoped_query(
                     query=query,
                     student_id=scope.bound_student_id(),
                     documents_dir=DOCUMENTS_DIR,
                     model_name=selected_model
                 )
-                if final_prompt:
+                if len(res) == 5:
+                    final_prompt, sql_q, sql_res, citations, instant_answer = res
+                else:
+                    final_prompt, sql_q, sql_res, citations = res
+                    instant_answer = None
+
+                if instant_answer:
+                    answer = instant_answer
+                    results = citations
+                    generation_time = 0.001
+                elif final_prompt:
                     t2 = time.time()
                     answer = generate_ollama_answer(prompt=final_prompt, model_name=selected_model)
                     results = citations
@@ -1429,15 +1439,27 @@ def api_stream_query():
                     yield f"data: {json.dumps({'token': notice_msg})}\n\n"
                     return
 
-                final_prompt, sql_q, sql_res, citations = await run_in_threadpool(
+                res = await run_in_threadpool(
                     execute_student_scoped_query,
                     query=query,
                     student_id=scope_bound_student_id,
                     documents_dir=DOCUMENTS_DIR,
                     model_name=model
                 )
+                if len(res) == 5:
+                    final_prompt, sql_q, sql_res, citations, instant_answer = res
+                else:
+                    final_prompt, sql_q, sql_res, citations = res
+                    instant_answer = None
+
+                if instant_answer:
+                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Direct Verified Registry Lookup']})}\n\n"
+                    yield f"data: {json.dumps({'token': instant_answer})}\n\n"
+                    yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}})}\n\n"
+                    return
+
                 if final_prompt:
-                    yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': ['Universal Structured Execution (SQLite)']})}\n\n"
+                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']})}\n\n"
                     async for stream_chunk in generate_ollama_stream_async(prompt=final_prompt, model_name=model):
                         yield stream_chunk
                     yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}})}\n\n"
