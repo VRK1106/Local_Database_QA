@@ -44,6 +44,9 @@ services:
           - backend
     volumes:
       - documents_data:/app/documents
+      - ./templates:/app/templates
+      - ./src:/app/src
+      - ./app.py:/app/app.py
     # Explicit container resource boundaries (prevents memory starvation)
     deploy:
       resources:
