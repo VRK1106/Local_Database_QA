@@ -345,66 +345,118 @@ def execute_student_scoped_query(query: str, student_id: str, documents_dir: Pat
     if not is_personal_intent:
         return None, None, None, []
 
-    tmp_path, conn, table_schemas = build_universal_sqlite_db(documents_dir, None)
-    if not table_schemas:
-        if conn:
-            conn.close()
-        try:
-            os.remove(tmp_path)
-        except:
-            pass
-        return None, None, None, []
+    # 1. High-Performance Fast-Path: Query authoritative PostgreSQL student_records (<1ms)
+    student_record = None
+    safe_sql = None
+    row = None
+    citations = []
 
-    # Find table with student identifier column
-    target_table = None
-    id_column = None
-    for t_name, info in table_schemas.items():
-        for col in info["samples"].keys():
-            if col.lower() in ["student_id", "usn", "roll_number", "roll_no", "id", "reg_no"]:
-                target_table = t_name
-                id_column = col
+    try:
+        from src.auth import get_student_record_by_id
+        db_rec = get_student_record_by_id(student_id)
+        if db_rec:
+            student_record = dict(db_rec)
+            # Ensure normalized canonical aliases
+            student_record["CGPA"] = student_record.get("cgpa", 0.0)
+            student_record["Branch"] = student_record.get("specialization", "Computer Science")
+            student_record["Backlogs"] = student_record.get("backlogs", 0)
+            student_record["Placed_Company"] = student_record.get("placed_company") or student_record.get("placement_status") or "Eligible"
+            safe_sql = f"SELECT * FROM student_records WHERE LOWER(TRIM(student_id)) = '{student_id.strip().lower()}' LIMIT 1;"
+            row = list(student_record.values())
+            citations.append({
+                "source": "PostgreSQL (student_records)",
+                "page": 1,
+                "score": 1.0,
+                "text": f"Authenticated Student Record ({student_id}): {student_record}"
+            })
+    except Exception:
+        student_record = None
+
+    # 2. Fallback to scanning uploaded documents if not present in primary Postgres table
+    if not student_record:
+        tmp_path, conn, table_schemas = build_universal_sqlite_db(documents_dir, None)
+        if not table_schemas:
+            if conn:
+                conn.close()
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+            return None, None, None, []
+
+        # Find table with student identifier column
+        target_table = None
+        id_column = None
+        for t_name, info in table_schemas.items():
+            for col in info["samples"].keys():
+                if col.lower() in ["student_id", "usn", "roll_number", "roll_no", "id", "reg_no"]:
+                    target_table = t_name
+                    id_column = col
+                    break
+            if target_table:
                 break
-        if target_table:
-            break
 
-    if not target_table or not id_column:
+        if not target_table or not id_column:
+            conn.close()
+            try:
+                os.remove(tmp_path)
+            except:
+                pass
+            return None, None, None, []
+
+        safe_sql = f"SELECT * FROM \"{target_table}\" WHERE LOWER(TRIM(\"{id_column}\")) = ? LIMIT 1;"
+        cur = conn.cursor()
+        cur.execute(safe_sql, (student_id.strip().lower(),))
+        row = cur.fetchone()
+        col_names = [description[0] for description in cur.description] if cur.description else []
         conn.close()
         try:
             os.remove(tmp_path)
         except:
             pass
-        return None, None, None, []
 
-    safe_sql = f"SELECT * FROM \"{target_table}\" WHERE LOWER(TRIM(\"{id_column}\")) = ? LIMIT 1;"
-    cur = conn.cursor()
-    cur.execute(safe_sql, (student_id.strip().lower(),))
-    row = cur.fetchone()
-    col_names = [description[0] for description in cur.description] if cur.description else []
-    conn.close()
-    try:
-        os.remove(tmp_path)
-    except:
-        pass
+        if not row:
+            return None, None, None, []
 
-    if not row:
-        return None, None, None, []
+        student_record = dict(zip(col_names, row))
+        citations.append({
+            "source": table_schemas[target_table]["source_file"],
+            "page": 1,
+            "score": 1.0,
+            "text": f"Authenticated Student Record ({student_id}): {student_record}"
+        })
 
-    student_record = dict(zip(col_names, row))
-    citations = [{
-        "source": table_schemas[target_table]["source_file"],
-        "page": 1,
-        "score": 1.0,
-        "text": f"Authenticated Student Record ({student_id}): {student_record}"
-    }]
+    # 3. Context Enrichment: If student query inquires about placement eligibility, rules, or circulars,
+    # retrieve official public circulars from ChromaDB (visibility='public')
+    public_context = ""
+    public_keywords = ["eligib", "criteria", "company", "circular", "policy", "drive", "rules", "cutoff", "package", "ctc"]
+    if any(k in query_lower for k in public_keywords):
+        try:
+            from src.embeddings import embed_query
+            from src.vectorstore import search
+            q_vec = embed_query(query)
+            public_chunks = search(query_embedding=q_vec, top_k=2, visibility="public")
+            if public_chunks:
+                public_context = "\n\nOfficial Public Placement Notices & Eligibility Criteria:\n" + "\n---\n".join([c["text"] for c in public_chunks])
+                for c in public_chunks:
+                    citations.append({
+                        "source": c.get("source", "Public Placement Circular"),
+                        "page": c.get("page", 1),
+                        "score": c.get("similarity", 1.0),
+                        "text": c.get("text", "")[:250]
+                    })
+        except Exception:
+            pass
 
     final_prompt = (
         f"You are the Placement Office Assistant answering an authenticated student whose verified ID is '{student_id}'.\n"
         f"The student asks: '{query}'\n\n"
-        f"Verified student's personal record from the official database:\n{json.dumps(student_record, indent=2)}\n\n"
+        f"Verified student's personal record from the official database:\n{json.dumps(student_record, indent=2)}"
+        f"{public_context}\n\n"
         f"Security & Privacy Directives:\n"
-        f"1. You may ONLY discuss and display information concerning this verified student (ID: '{student_id}').\n"
+        f"1. You may ONLY discuss and display personal records concerning this verified student (ID: '{student_id}').\n"
         f"2. If the student asks about any other student, their classmates' CGPA, ranks, or aggregate university statistics, strictly refuse and inform them that cross-student records are confidential.\n"
-        f"3. Provide a helpful, clear, and reassuring response based strictly on their official record above."
+        f"3. Provide a helpful, clear, precise, and reassuring response answering the student's question directly based strictly on their official record and any attached public circulars above."
     )
     return final_prompt, safe_sql, [row], citations
 

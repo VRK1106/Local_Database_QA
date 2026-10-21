@@ -402,7 +402,7 @@
                         </td>
                         <td>
                             <div style="font-weight: 500; color: #e2e8f0; font-size: 12.5px;">{{ t.creator_username }}</div>
-                            <div style="font-size: 10.5px; color: var(--text-muted);">{{ t.creator_role|capitalize }} &bull; {{ t.created_at[:10] if t.created_at else '' }}</div>
+                            <div style="font-size: 10.5px; color: var(--text-muted);">{{ t.creator_role|capitalize }} &bull; {{ (t.created_at|string)[:10] if t.created_at else '' }}</div>
                         </td>
                         <td style="text-align: right;">
                             <a href="{{ url_for('view_ticket_route', ticket_id=t.id) }}" class="btn" style="background: rgba(6, 182, 212, 0.14); color: var(--accent-cyan); border: 1px solid rgba(6, 182, 212, 0.35); padding: 5px 12px; font-size: 12px; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">

@@ -1,0 +1,50 @@
+================================================================================
+OFFICE OF CAREER SERVICES & CORPORATE RELATIONS
+CAMPUS PLACEMENT CIRCULAR - ACADEMIC YEAR 2025-2026
+Circular Ref No: TPO/2026/CIR-042
+Date: October 14, 2025
+Visibility: PUBLIC (All Registered Students)
+================================================================================
+
+SUBJECT: UPCOMING RECRUITMENT DRIVE - APEX GLOBAL TECHNOLOGIES
+
+1. COMPANY OVERVIEW:
+Apex Global Technologies is a premier cloud engineering, AI platforms, and enterprise 
+infrastructure solutions provider headquartered in Bengaluru with global delivery centers 
+across North America, Europe, and Asia-Pacific.
+
+2. ELIGIBILITY CRITERIA:
+- Target Degree: B.Tech / B.E. / M.Tech
+- Eligible Branches: Computer Science & Engineering (CSE), Information Technology (IT), 
+  Electronics & Communication Engineering (ECE), and Data Science.
+- Academic Threshold: Minimum Cumulative Grade Point Average (CGPA) of 7.50 with no active backlogs.
+- Minimum 10th and 12th / Diploma aggregate of 70.0% or above.
+- Maximum gap in academic study: 1 Year (duly justified).
+
+3. COMPENSATION & ROLE DESIGNATION:
+- Designation: Associate Cloud Solutions Engineer / Graduate Software Engineer
+- Annual Cost to Company (CTC): INR 12,00,000/- Per Annum (Fixed: 10 LPA + Performance Bonus: 2 LPA)
+- Work Location: Bengaluru / Hyderabad / Pune (Hybrid model)
+- Probation / Internship Period: 6 Months stipend @ INR 35,000/- per month.
+
+4. SELECTION PROCEDURE:
+- Stage 1: Online Technical Assessment (Data Structures, Algorithms, SQL, and CS Core Fundamentals) - 90 Minutes.
+- Stage 2: Coding Hackathon / Problem Solving Evaluation (2 Complex algorithmic challenges) - 60 Minutes.
+- Stage 3: Technical Interview Round 1 & Round 2 (System Architecture, Projects, Operating Systems).
+- Stage 4: Leadership & HR Behavioral Assessment.
+
+5. SCHEDULE & KEY DATES:
+- Student Registration Deadline: October 20, 2025 at 17:00 IST.
+- Online Assessment Date: October 24, 2025 (Slot timings to be conveyed via SMS/Email).
+- Campus Interview Rounds: October 28 - October 29, 2025.
+
+6. MANDATORY INSTRUCTIONS:
+- Formal western attire is mandatory for all interview rounds.
+- Carry 3 updated hard copies of resume along with college identity card.
+- Late submissions will not be entertained under any circumstances.
+
+Issued by:
+Placement Directorate
+Office of Career Services
+Contact: placements@campus.edu | Desk: Ext-4040
+================================================================================

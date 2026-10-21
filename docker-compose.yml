@@ -145,10 +145,10 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      # Memory Optimization: Limit parallel streams and unload idle models after 5m
+      # Performance Optimization: Keep model pre-loaded in GPU VRAM to eliminate 15s cold starts
       - OLLAMA_NUM_PARALLEL=1
       - OLLAMA_MAX_LOADED_MODELS=1
-      - OLLAMA_KEEP_ALIVE=5m
+      - OLLAMA_KEEP_ALIVE=24h
     # Internal port exposure ONLY: No host port binding prevents external internet access
     expose:
       - "11434"

@@ -189,6 +189,19 @@ def auto_sync_startup():
                     print(f"[STARTUP] Auto-indexed {len(chunks)} chunks from '{doc_file.name}'.")
                 except Exception as e:
                     print(f"[STARTUP] Warning: Could not index '{doc_file.name}': {e}")
+
+            # Ensure public notices and circulars have explicit 'public' visibility in ChromaDB
+            try:
+                from src.vectorstore import update_source_visibility, stats
+                st = stats()
+                for doc in st.get("source_details", []):
+                    name_lower = doc["name"].lower()
+                    if any(pub_word in name_lower for pub_word in ("public", "circular", "notice", "schedule")):
+                        if doc.get("visibility") != "public":
+                            update_source_visibility(doc["name"], "public")
+                            print(f"[STARTUP] Updated visibility of '{doc['name']}' to public.")
+            except Exception as ve:
+                print(f"[STARTUP] Visibility sync notice: {ve}")
     except Exception as ex:
         print(f"[STARTUP] Notice: auto_sync_startup skipped: {ex}")
 
