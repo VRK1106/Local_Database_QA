@@ -1453,16 +1453,16 @@ def api_stream_query():
                     instant_answer = None
 
                 if instant_answer:
-                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Direct Verified Registry Lookup']})}\n\n"
-                    yield f"data: {json.dumps({'token': instant_answer})}\n\n"
-                    yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}})}\n\n"
+                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Direct Verified Registry Lookup']}, default=str)}\n\n"
+                    yield f"data: {json.dumps({'token': instant_answer}, default=str)}\n\n"
+                    yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}}, default=str)}\n\n"
                     return
 
                 if final_prompt:
-                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']})}\n\n"
+                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']}, default=str)}\n\n"
                     async for stream_chunk in generate_ollama_stream_async(prompt=final_prompt, model_name=model):
                         yield stream_chunk
-                    yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}})}\n\n"
+                    yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}}, default=str)}\n\n"
                     return
 
                 # Semantic Vector Search: Strictly visibility='public'
@@ -1478,11 +1478,11 @@ def api_stream_query():
                         visibility="public"
                     )
                     context_texts = [c["text"] for c in context_chunks]
-                    yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': context_texts})}\n\n"
+                    yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': context_texts}, default=str)}\n\n"
                     prompt = build_rag_prompt(query, context_chunks)
                 else:
                     prompt = query
-                    yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []})}\n\n"
+                    yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []}, default=str)}\n\n"
 
                 async for stream_chunk in generate_ollama_stream_async(prompt=prompt, model_name=model):
                     yield stream_chunk
@@ -1500,10 +1500,10 @@ def api_stream_query():
                     model_name=model
                 )
                 if final_prompt:
-                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']})}\n\n"
+                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']}, default=str)}\n\n"
                     async for stream_chunk in generate_ollama_stream_async(prompt=final_prompt, model_name=model):
                         yield stream_chunk
-                    yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}})}\n\n"
+                    yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}}, default=str)}\n\n"
                     return
 
             context_chunks = []
@@ -1524,17 +1524,17 @@ def api_stream_query():
                 } for c in context_chunks]
                 context_texts = [c["text"] for c in context_chunks]
 
-                yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': context_texts})}\n\n"
+                yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': context_texts}, default=str)}\n\n"
                 prompt = build_rag_prompt(query, context_chunks)
             else:
                 prompt = query
-                yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []})}\n\n"
+                yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []}, default=str)}\n\n"
 
             async for stream_chunk in generate_ollama_stream_async(prompt=prompt, model_name=model):
                 yield stream_chunk
 
         except Exception as e:
-            yield f"data: {json.dumps({'error': f'Streaming backend error: {str(e)}'})}\n\n"
+            yield f"data: {json.dumps({'error': f'Streaming backend error: {str(e)}'}, default=str)}\n\n"
 
     response = Response(stream_with_context(stream_async_generator(async_event_stream)), mimetype="text/event-stream")
     response.headers['Cache-Control'] = 'no-cache, no-transform'

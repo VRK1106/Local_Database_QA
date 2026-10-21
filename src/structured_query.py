@@ -355,14 +355,23 @@ def execute_student_scoped_query(query: str, student_id: str, documents_dir: Pat
         from src.auth import get_student_record_by_id
         db_rec = get_student_record_by_id(student_id)
         if db_rec:
-            student_record = dict(db_rec)
+            # Convert non-serializable objects (datetime, Decimal) to JSON-safe primitives
+            student_record = {}
+            for k, v in db_rec.items():
+                if hasattr(v, 'isoformat'):
+                    student_record[k] = v.isoformat()
+                elif hasattr(v, '__float__') and not isinstance(v, (int, float)):
+                    student_record[k] = float(v)
+                else:
+                    student_record[k] = v
+
             # Ensure normalized canonical aliases
             student_record["CGPA"] = student_record.get("cgpa", 0.0)
             student_record["Branch"] = student_record.get("specialization", "Computer Science")
             student_record["Backlogs"] = student_record.get("backlogs", 0)
-            student_record["Placed_Company"] = student_record.get("placed_company") or student_record.get("placement_status") or "Eligible"
+            student_record["Placed_Company"] = student_record.get("placed_company") or student_record.get("placement_status") or "Not Placed"
             safe_sql = f"SELECT * FROM student_records WHERE LOWER(TRIM(student_id)) = '{student_id.strip().lower()}' LIMIT 1;"
-            row = list(student_record.values())
+            row = [str(x) if hasattr(x, 'isoformat') else x for x in student_record.values()]
             citations.append({
                 "source": "PostgreSQL (student_records)",
                 "page": 1,
@@ -451,7 +460,7 @@ def execute_student_scoped_query(query: str, student_id: str, documents_dir: Pat
     final_prompt = (
         f"You are the Placement Office Assistant answering an authenticated student whose verified ID is '{student_id}'.\n"
         f"The student asks: '{query}'\n\n"
-        f"Verified student's personal record from the official database:\n{json.dumps(student_record, indent=2)}"
+        f"Verified student's personal record from the official database:\n{json.dumps(student_record, indent=2, default=str)}"
         f"{public_context}\n\n"
         f"Security & Privacy Directives:\n"
         f"1. You may ONLY discuss and display personal records concerning this verified student (ID: '{student_id}').\n"

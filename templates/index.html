@@ -1637,11 +1637,13 @@
 
             // Final formatting pass (remove cursor blink)
             const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
-            const finalFormatted = formatMeaningfulText(accumulatedMarkdown);
-            if (typeof marked !== 'undefined') {
-                answerTextDiv.innerHTML = marked.parse(finalFormatted);
-            } else {
-                answerTextDiv.textContent = finalFormatted;
+            if (accumulatedMarkdown) {
+                const finalFormatted = formatMeaningfulText(accumulatedMarkdown);
+                if (typeof marked !== 'undefined') {
+                    answerTextDiv.innerHTML = marked.parse(finalFormatted);
+                } else {
+                    answerTextDiv.textContent = finalFormatted;
+                }
             }
 
             answerMeta.innerHTML = `<span><i class="fa-solid fa-bolt"></i> Stream Completed in <strong>${totalTime}s</strong></span>`;
