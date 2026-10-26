@@ -448,6 +448,22 @@ def init_auth_db():
                 pass
     conn.commit()
 
+    # Migration check for roster columns on student_records
+    if is_pg:
+        cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'student_records';")
+        existing_cols = {row[0].lower() for row in cur.fetchall()}
+    else:
+        cur.execute("PRAGMA table_info(student_records);")
+        existing_cols = {row[1].lower() for row in cur.fetchall()}
+
+    for col_name, col_type in [("tenth_percent", "REAL"), ("twelfth_percent", "REAL")]:
+        if col_name not in existing_cols:
+            try:
+                cur.execute(f"ALTER TABLE student_records ADD COLUMN {col_name} {col_type};")
+            except Exception:
+                pass
+    conn.commit()
+
     # Seed default persona accounts if not present
     cur.execute("SELECT id FROM users WHERE username = 'admin';")
     if not cur.fetchone():
@@ -828,80 +844,138 @@ def import_students_from_csv(csv_content: str) -> tuple[int, int, list[dict]]:
 # Student Academic Records Management (Placement Officers / Coordinators)
 # =========================================================================
 
-def seed_student_records_from_documents(documents_dir: Path | str):
-    """Auto-seed student_records in auth.db from Mock_Placement.xlsx or CSV files in documents_dir if table is empty."""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM student_records;")
-    cnt = cur.fetchone()[0]
-    if cnt > 0:
-        conn.close()
-        return
-
+def _iter_roster_rows(documents_dir: Path | str):
+    """Yield normalised student dicts from roster spreadsheets (.xlsx/.xls) in documents_dir."""
     doc_p = Path(documents_dir)
     if not doc_p.exists():
-        conn.close()
         return
 
     import pandas as pd
+
+    def _num(val, cast, default):
+        try:
+            if val is None or str(val).strip().lower() in ("", "nan", "none", "-"):
+                return default
+            return cast(float(val))
+        except Exception:
+            return default
+
+    def _text(val, default=None):
+        sval = str(val).strip() if val is not None else ""
+        return default if sval.lower() in ("", "nan", "none", "-") else sval
+
     for f in doc_p.glob("**/*"):
-        if f.suffix.lower() in [".xlsx", ".xls"]:
-            try:
-                df = pd.read_excel(f, header=None).dropna(how='all')
-                if not df.empty:
-                    header_label = df.notna().sum(axis=1).idxmax()
-                    header_pos = df.index.get_loc(header_label)
-                    df.columns = df.iloc[header_pos].astype(str).str.strip()
-                    df = df.iloc[header_pos + 1:].reset_index(drop=True)
-                    df = df.dropna(how='all', axis=1)
+        if f.suffix.lower() not in [".xlsx", ".xls"]:
+            continue
+        try:
+            df = pd.read_excel(f, header=None).dropna(how='all')
+        except Exception:
+            continue
+        if df.empty:
+            continue
+        header_label = df.notna().sum(axis=1).idxmax()
+        header_pos = df.index.get_loc(header_label)
+        df.columns = df.iloc[header_pos].astype(str).str.strip()
+        df = df.iloc[header_pos + 1:].reset_index(drop=True)
+        df = df.dropna(how='all', axis=1)
 
-                    col_map = {}
-                    for c in df.columns:
-                        cl = str(c).strip().lower()
-                        if 'student' in cl or 'usn' in cl or 'roll' in cl:
-                            col_map['student_id'] = c
-                        elif 'name' in cl:
-                            col_map['name'] = c
-                        elif 'special' in cl or 'branch' in cl or 'dept' in cl:
-                            col_map['specialization'] = c
-                        elif 'cgpa' in cl or 'gpa' in cl:
-                            col_map['cgpa'] = c
-                        elif 'backlog' in cl:
-                            col_map['backlogs'] = c
-                        elif 'status' in cl:
-                            col_map['placement_status'] = c
-                        elif 'company' in cl:
-                            col_map['placed_company'] = c
+        col_map = {}
+        for c in df.columns:
+            cl = str(c).strip().lower()
+            if 'student' in cl or 'usn' in cl or 'roll' in cl:
+                col_map.setdefault('student_id', c)
+            elif 'name' in cl:
+                col_map.setdefault('name', c)
+            elif 'gender' in cl:
+                col_map.setdefault('gender', c)
+            elif 'location' in cl or 'city' in cl:
+                col_map.setdefault('location', c)
+            elif 'special' in cl or 'branch' in cl or 'dept' in cl:
+                col_map.setdefault('specialization', c)
+            elif 'cgpa' in cl or 'gpa' in cl:
+                col_map.setdefault('cgpa', c)
+            elif 'backlog' in cl:
+                col_map.setdefault('backlogs', c)
+            elif 'intern' in cl:
+                col_map.setdefault('internships', c)
+            elif '10' in cl:
+                col_map.setdefault('tenth_percent', c)
+            elif '12' in cl:
+                col_map.setdefault('twelfth_percent', c)
+            elif 'status' in cl:
+                col_map.setdefault('placement_status', c)
+            elif 'company' in cl:
+                col_map.setdefault('placed_company', c)
 
-                    if 'student_id' in col_map:
-                        for _, row in df.iterrows():
-                            s_id = str(row.get(col_map['student_id'], '')).strip()
-                            if not s_id or s_id.lower() == 'nan':
-                                continue
-                            name_val = str(row.get(col_map.get('name', ''), s_id)).strip()
-                            spec_val = str(row.get(col_map.get('specialization', ''), 'Computer Science')).strip()
-                            try:
-                                cgpa_val = round(float(row.get(col_map.get('cgpa', 0), 0.0)), 2)
-                            except:
-                                cgpa_val = 0.0
-                            try:
-                                backlogs_val = int(row.get(col_map.get('backlogs', 0), 0))
-                            except:
-                                backlogs_val = 0
-                            p_status = str(row.get(col_map.get('placement_status', ''), 'Eligible')).strip()
-                            p_comp = str(row.get(col_map.get('placed_company', ''), '')).strip() or None
-                            if p_comp in ['nan', 'None', '-']:
-                                p_comp = None
+        if 'student_id' not in col_map:
+            continue
 
-                            cur.execute("""
-                                INSERT OR IGNORE INTO student_records 
-                                (student_id, name, specialization, cgpa, backlogs, placement_status, placed_company)
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """, (s_id, name_val, spec_val, cgpa_val, backlogs_val, p_status, p_comp))
-                        conn.commit()
-            except Exception:
-                pass
-    conn.close()
+        for _, row in df.iterrows():
+            get = lambda key: row.get(col_map[key]) if key in col_map else None
+            s_id = _text(get('student_id'))
+            if not s_id:
+                continue
+            yield {
+                "student_id": s_id,
+                "name": _text(get('name'), s_id),
+                "gender": _text(get('gender'), 'Other'),
+                "location": _text(get('location'), 'Campus'),
+                "specialization": _text(get('specialization'), 'Computer Science'),
+                "cgpa": round(_num(get('cgpa'), float, 0.0), 2),
+                "backlogs": _num(get('backlogs'), int, 0),
+                "internships": _num(get('internships'), int, 0),
+                "tenth_percent": _num(get('tenth_percent'), float, None),
+                "twelfth_percent": _num(get('twelfth_percent'), float, None),
+                "placement_status": _text(get('placement_status'), 'Eligible'),
+                "placed_company": _text(get('placed_company')),
+            }
+
+
+def seed_student_records_from_documents(documents_dir: Path | str):
+    """
+    Seed student_records from roster spreadsheets in documents_dir when the table is empty.
+    When rows already exist, only backfill roster fields that are still at their schema
+    placeholders (gender/location/internships/10th/12th), never overwriting officer edits
+    to CGPA, backlogs or placement status.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM student_records;")
+        is_empty = cur.fetchone()[0] == 0
+
+        for rec in _iter_roster_rows(documents_dir):
+            if is_empty:
+                # ON CONFLICT ... DO NOTHING is valid in both PostgreSQL and SQLite (>= 3.24)
+                cur.execute("""
+                    INSERT INTO student_records
+                    (student_id, name, gender, location, specialization, cgpa, backlogs, internships,
+                     tenth_percent, twelfth_percent, placement_status, placed_company)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (student_id) DO NOTHING
+                """, (rec["student_id"], rec["name"], rec["gender"], rec["location"], rec["specialization"],
+                      rec["cgpa"], rec["backlogs"], rec["internships"], rec["tenth_percent"],
+                      rec["twelfth_percent"], rec["placement_status"], rec["placed_company"]))
+            else:
+                cur.execute("""
+                    UPDATE student_records SET
+                        gender = CASE WHEN gender IS NULL OR gender = 'Other' THEN ? ELSE gender END,
+                        location = CASE WHEN location IS NULL OR location = 'Campus' THEN ? ELSE location END,
+                        internships = CASE WHEN internships IS NULL OR internships = 0 THEN ? ELSE internships END,
+                        tenth_percent = COALESCE(tenth_percent, ?),
+                        twelfth_percent = COALESCE(twelfth_percent, ?)
+                    WHERE UPPER(TRIM(student_id)) = UPPER(TRIM(?))
+                """, (rec["gender"], rec["location"], rec["internships"], rec["tenth_percent"],
+                      rec["twelfth_percent"], rec["student_id"]))
+        conn.commit()
+    except Exception as e:
+        print(f"[AUTH] Student record seeding skipped: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        conn.close()
 
 
 def get_all_student_records() -> list[dict]:
