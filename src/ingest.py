@@ -219,11 +219,32 @@ def extract_text_from_excel(stream: BytesIO, filename: str) -> list[dict]:
         import pandas as pd
         excel_file = pd.ExcelFile(stream)
         for idx, sheet_name in enumerate(excel_file.sheet_names, start=1):
-            df_sheet = pd.read_excel(excel_file, sheet_name=sheet_name).dropna(how='all')
-            if df_sheet.empty:
+            raw = pd.read_excel(excel_file, sheet_name=sheet_name, header=None).dropna(how='all')
+            if raw.empty:
                 continue
 
-            headers = [str(c).strip() for c in df_sheet.columns]
+            # Detect the real header row (the densest row) instead of assuming row 1: sheets often
+            # start with a title or summary block, which otherwise yields "Unnamed: N" columns.
+            header_label = raw.notna().sum(axis=1).idxmax()
+            header_pos = raw.index.get_loc(header_label)
+            preamble_lines = []
+            for _, pre_row in raw.iloc[:header_pos].iterrows():
+                cells = [str(v).strip() for v in pre_row if pd.notna(v) and str(v).strip()]
+                if cells:
+                    preamble_lines.append(" | ".join(cells))
+
+            headers = []
+            for col_i, h in enumerate(raw.loc[header_label]):
+                name = str(h).strip() if pd.notna(h) and str(h).strip() else f"Column {col_i + 1}"
+                while name in headers:
+                    name += "_"
+                headers.append(name)
+            df_sheet = raw.iloc[header_pos + 1:].copy()
+            df_sheet.columns = headers
+            df_sheet = df_sheet.dropna(how='all', axis=1).dropna(how='all')
+            headers = list(df_sheet.columns)
+            if df_sheet.empty:
+                continue
             total_rows = len(df_sheet)
             col_value_counts = {h: {} for h in headers}
 
@@ -236,6 +257,9 @@ def extract_text_from_excel(stream: BytesIO, filename: str) -> list[dict]:
 
             # Build Categorical Column Distribution Summary
             summary_lines = []
+            if preamble_lines:
+                summary_lines.append("=== Sheet Notes ===")
+                summary_lines.extend(preamble_lines)
             cat_summaries = []
             for h in headers:
                 counts = col_value_counts[h]
@@ -339,11 +363,36 @@ def extract_pages(stream: BytesIO, filename: str) -> list[dict]:
         trim_memory()
 
 
-def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chunk_overlap: int = 50, visibility: str = "internal") -> list[dict]:
-    """Split extracted pages into overlapping text chunks with rich metadata, visibility tagging, and header prefix preservation."""
+# Bumped whenever chunking changes; startup sync re-indexes documents whose chunks carry an older version.
+CHUNKER_VERSION = 2
+
+
+def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 200, chunk_overlap: int = 30, visibility: str = "internal") -> list[dict]:
+    """Split extracted pages into overlapping text chunks with rich metadata, visibility tagging, and header prefix preservation.
+
+    chunk_size is in words and must stay well under the embedding model's 512-token window
+    (~380 words for bge-small); text beyond it is silently truncated and never embedded. Small
+    chunks also keep top-k RAG prompts inside the LLM's context window.
+    """
     chunks = []
     chunk_counter = 0
     clean_visibility = "public" if str(visibility).lower() == "public" else "internal"
+
+    def make_chunk(text, page_num, word_count):
+        nonlocal chunk_counter
+        chunks.append({
+            "id": f"{source_name}_p{page_num}_c{chunk_counter}",
+            "text": text,
+            "metadata": {
+                "source": source_name,
+                "page": page_num,
+                "chunk_index": chunk_counter,
+                "word_count": word_count,
+                "visibility": clean_visibility,
+                "chunker_version": CHUNKER_VERSION
+            }
+        })
+        chunk_counter += 1
 
     for page_info in pages:
         page_num = page_info["page"]
@@ -355,7 +404,11 @@ def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chun
 
         if "=== Detailed Records ===" in text:
             parts = text.split("=== Detailed Records ===")
-            header_prefix = parts[0].strip() + "\n=== Detailed Records ===\n"
+            overview = parts[0].strip()
+            # The sheet overview becomes its own chunk; only its title line is repeated on record
+            # chunks, so the overview no longer crowds rows out of every chunk.
+            make_chunk(overview, page_num, len(overview.split()))
+            header_prefix = overview.split("\n", 1)[0].strip() + "\n=== Detailed Records ===\n"
             body_text = parts[1].strip()
         elif "\nRow #" in text:
             lines = text.split("\nRow #")[0]
@@ -366,10 +419,16 @@ def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chun
             header_prefix = lines.strip() + "\n"
             body_text = text[len(lines):].strip()
 
-        # Split by lines to preserve row integrity
-        lines = body_text.split('\n')
+        # Split by lines to preserve row integrity; break up any single line longer than a chunk
         prefix_words = len(header_prefix.split()) if header_prefix else 0
         effective_chunk_size = max(50, chunk_size - prefix_words)
+        lines = []
+        for raw_line in body_text.split('\n'):
+            words = raw_line.split()
+            if len(words) <= effective_chunk_size:
+                lines.append(raw_line)
+            else:
+                lines.extend(" ".join(words[i:i + effective_chunk_size]) for i in range(0, len(words), effective_chunk_size))
 
         current_chunk_lines = []
         current_word_count = 0
@@ -382,18 +441,7 @@ def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chun
             line_words = len(line.split())
             if current_word_count + line_words > effective_chunk_size and current_chunk_lines:
                 chunk_text = (header_prefix + "\n".join(current_chunk_lines)).strip()
-                chunks.append({
-                    "id": f"{source_name}_p{page_num}_c{chunk_counter}",
-                    "text": chunk_text,
-                    "metadata": {
-                        "source": source_name,
-                        "page": page_num,
-                        "chunk_index": chunk_counter,
-                        "word_count": current_word_count + prefix_words,
-                        "visibility": clean_visibility
-                    }
-                })
-                chunk_counter += 1
+                make_chunk(chunk_text, page_num, current_word_count + prefix_words)
                 
                 # Keep overlap lines
                 overlap_words = 0
@@ -413,17 +461,6 @@ def chunk_pages(pages: list[dict], source_name: str, chunk_size: int = 500, chun
 
         if current_chunk_lines:
             chunk_text = (header_prefix + "\n".join(current_chunk_lines)).strip()
-            chunks.append({
-                "id": f"{source_name}_p{page_num}_c{chunk_counter}",
-                "text": chunk_text,
-                "metadata": {
-                    "source": source_name,
-                    "page": page_num,
-                    "chunk_index": chunk_counter,
-                    "word_count": current_word_count + prefix_words,
-                    "visibility": clean_visibility
-                }
-            })
-            chunk_counter += 1
+            make_chunk(chunk_text, page_num, current_word_count + prefix_words)
 
     return chunks

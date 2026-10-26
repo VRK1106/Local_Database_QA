@@ -9,6 +9,8 @@ import httpx
 from src.config import OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL
 from src.memory_utils import trim_memory
 
+RAG_CONTEXT_CHAR_BUDGET = 10000
+
 _models_cache = None
 _models_cache_time = 0.0
 
@@ -115,12 +117,17 @@ def build_rag_prompt(question: str, context_chunks: list[dict]) -> str:
             f"ANSWER:"
         )
 
+    # Ollama's default context is 4096 tokens and it silently drops the *start* of an overlong
+    # prompt (the rules and the best-ranked source), so cap retrieved text (~2.5k tokens).
     context_str = ""
     for idx, hit in enumerate(context_chunks, start=1):
         source = hit.get("source", "Document")
         page = hit.get("page", 1)
         text = hit.get("text", "")
-        context_str += f"[Source {idx}: {source}, Page {page}]\n{text}\n\n"
+        block = f"[Source {idx}: {source}, Page {page}]\n{text}\n\n"
+        if context_str and len(context_str) + len(block) > RAG_CONTEXT_CHAR_BUDGET:
+            break
+        context_str += block[:RAG_CONTEXT_CHAR_BUDGET]
 
     prompt = (
         f"You are a strict, authoritative University Placement & Academic QA assistant.\n"

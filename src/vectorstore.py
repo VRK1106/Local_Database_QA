@@ -76,22 +76,51 @@ def invalidate_stats_cache():
     _stats_cache_time = 0.0
 
 
-def ingested_hashes() -> set[str]:
-    """Return set of document file hashes already indexed."""
+def ingested_hashes(min_chunker_version: int | None = None) -> set[str]:
+    """Return set of document file hashes already indexed in the vector collection.
+
+    Read from chunk metadata rather than hashing files on disk: a file sitting in the
+    documents directory is not proof that its embeddings exist (e.g. after a Chroma volume
+    reset), and treating it as indexed would make startup sync and re-uploads silently skip it.
+    With min_chunker_version, hashes indexed by an older chunker are excluded so they get re-indexed.
+    """
     hashes: set[str] = set()
-    try:
-        doc_dir = Path(DOCUMENTS_DIR)
-        from src.ingest import file_hash
-        if doc_dir.exists():
-            for f in doc_dir.iterdir():
-                if f.is_file() and not f.name.startswith('.'):
-                    try:
-                        hashes.add(file_hash(f))
-                    except Exception:
-                        pass
-    except Exception as ex:
-        print(f"Error reading ingested hashes: {ex}")
+    with _chroma_lock:
+        collection = get_collection()
+        if not collection:
+            return hashes
+        try:
+            result = collection.get(include=["metadatas"])
+            for meta in result.get("metadatas") or []:
+                meta = meta or {}
+                digest = meta.get("file_hash")
+                if not digest:
+                    continue
+                if min_chunker_version is not None and int(meta.get("chunker_version", 1)) < min_chunker_version:
+                    continue
+                hashes.add(digest)
+        except Exception as ex:
+            print(f"Error reading ingested hashes: {ex}")
     return hashes
+
+
+def delete_source_chunks(source_name: str) -> str | None:
+    """Remove a source's chunks from the collection (keeping the file); return its previous visibility."""
+    with _chroma_lock:
+        collection = get_collection()
+        if not collection:
+            return None
+        try:
+            res = collection.get(where={"source": source_name}, include=["metadatas"])
+            ids = res.get("ids") or []
+            metas = res.get("metadatas") or []
+            if ids:
+                collection.delete(ids=ids)
+                invalidate_stats_cache()
+            return (metas[0] or {}).get("visibility") if metas else None
+        except Exception as e:
+            print(f"[ERROR] Failed to delete chunks for {source_name}: {e}")
+            return None
 
 
 def add_chunks(chunks: list[dict], embeddings: list[list[float]], file_hash: str) -> int:
