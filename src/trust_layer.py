@@ -1,12 +1,30 @@
 import os
+import re
 import nltk
 from sentence_transformers import CrossEncoder
 
-# Download the punkt_tab sentence tokenizer if not present
+# The punkt_tab tokenizer is baked into the Docker image at build time. Outside the image, try a
+# quiet one-off download; if that is impossible (air-gapped host) fall back to a regex splitter
+# instead of failing every verification request.
+_PUNKT_AVAILABLE = True
 try:
     nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
-    nltk.download('punkt_tab')
+    try:
+        _PUNKT_AVAILABLE = bool(nltk.download('punkt_tab', quiet=True, raise_on_error=True))
+    except Exception:
+        _PUNKT_AVAILABLE = False
+
+
+def split_claims(text: str) -> list[str]:
+    """Split an answer into sentence-level claims (NLTK punkt, regex fallback)."""
+    if _PUNKT_AVAILABLE:
+        try:
+            return [s for s in nltk.tokenize.sent_tokenize(text) if s.strip()]
+        except LookupError:
+            pass
+    parts = re.split(r'(?<=[.!?])\s+|\n+', text)
+    return [p.strip() for p in parts if p.strip()]
 
 # Initialize the CrossEncoder globally so it's loaded only once
 # We use nli-deberta-v3-small for local, 100% offline NLI fact-checking.
@@ -38,7 +56,7 @@ def verify_claims(draft_answer, context_texts):
     combined_context = " ".join(context_texts)
     
     # 1. Extract claims using NLTK
-    claims = nltk.tokenize.sent_tokenize(draft_answer)
+    claims = split_claims(draft_answer)
     if not claims:
         return {"score": 100, "claims": []}
     

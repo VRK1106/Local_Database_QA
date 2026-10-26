@@ -1,0 +1,10 @@
+.git
+.env
+__pycache__/
+*.py[cod]
+vector_db/
+backup_pre_spa/
+reports/
+*.log
+venv/
+.venv/

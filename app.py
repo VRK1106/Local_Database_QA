@@ -66,7 +66,8 @@ from src.vectorstore import (
     update_source_visibility,
     get_source_chunks,
     reset_collection,
-    ingested_hashes
+    ingested_hashes,
+    delete_source_chunks
 )
 from src.ollama_client import (
     list_ollama_models,
@@ -80,6 +81,7 @@ from src.ollama_client import (
 )
 from src.structured_query import (
     is_aggregate_query,
+    is_student_restricted_query,
     execute_universal_structured_query,
     execute_student_scoped_query,
     get_student_record
@@ -126,6 +128,13 @@ from src.tickets import (
     CATEGORIES_DEVELOPER,
 )
 
+STUDENT_RESTRICTED_NOTICE = (
+    "**Access Restricted:** Institutional aggregates, batch statistics, peer rankings, and other students' "
+    "records are confidential and reserved for Placement Officers. "
+    "You may ask about placement eligibility criteria, company drives and schedules, "
+    "or your own placement profile."
+)
+
 app = Flask(__name__)
 app.secret_key = APP_SECRET_KEY
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -159,15 +168,35 @@ def auto_sync_startup():
                 except Exception as me:
                     print(f"[STARTUP] Migration warning: {me}")
 
-        # 2. Sync any unindexed documents in DOCUMENTS_DIR into ChromaDB
-        from src.vectorstore import get_collection, add_chunks, ingested_hashes
-        from src.ingest import extract_pages, chunk_pages, file_hash
+        # 2. Seed bundled sample documents into the (named-volume) documents directory.
+        # A named volume is only populated from the image on first creation, so documents added to
+        # the repository later never reach it. Each seed file is copied at most once (tracked in
+        # .seeded) so a document an officer deletes is not resurrected on the next restart.
+        seed_dir = Path(os.environ.get("SEED_DOCUMENTS_DIR", "/app/seed_documents"))
+        if seed_dir.is_dir() and seed_dir.resolve() != Path(DOCUMENTS_DIR).resolve():
+            import shutil
+            marker = Path(DOCUMENTS_DIR) / ".seeded"
+            seeded = set(marker.read_text(encoding="utf-8").splitlines()) if marker.exists() else set()
+            for seed_file in seed_dir.iterdir():
+                if not seed_file.is_file() or seed_file.name.startswith('.') or seed_file.name in seeded:
+                    continue
+                target = Path(DOCUMENTS_DIR) / seed_file.name
+                if not target.exists():
+                    shutil.copy2(seed_file, target)
+                    print(f"[STARTUP] Seeded sample document '{seed_file.name}' into documents volume.")
+                seeded.add(seed_file.name)
+            marker.write_text("\n".join(sorted(seeded)), encoding="utf-8")
+
+        # 3. Sync any unindexed documents in DOCUMENTS_DIR into ChromaDB
+        # Files indexed by an older chunker are re-indexed in place, keeping their visibility.
+        from src.vectorstore import get_collection, add_chunks, ingested_hashes, delete_source_chunks
+        from src.ingest import extract_pages, chunk_pages, file_hash, CHUNKER_VERSION
         from src.embeddings import embed_documents
         from io import BytesIO
 
         collection = get_collection()
         if collection and Path(DOCUMENTS_DIR).exists():
-            known = ingested_hashes()
+            known = ingested_hashes(min_chunker_version=CHUNKER_VERSION)
             for doc_file in Path(DOCUMENTS_DIR).iterdir():
                 if not doc_file.is_file() or doc_file.name.startswith('.'):
                     continue
@@ -179,29 +208,22 @@ def auto_sync_startup():
                     pages = extract_pages(BytesIO(content), doc_file.name)
                     if not pages:
                         continue
-                    visibility = "internal" if any(w in doc_file.name.lower() for w in ("internal", "memo", "private", "confidential")) else "public"
+                    previous_visibility = delete_source_chunks(doc_file.name)
+                    if previous_visibility:
+                        visibility = previous_visibility
+                    else:
+                        # New files default to internal (fail closed); only obvious notices start public
+                        name_lower = doc_file.name.lower()
+                        visibility = "public" if any(w in name_lower for w in ("public", "circular", "notice")) else "internal"
                     chunks = chunk_pages(pages, doc_file.name, visibility=visibility)
                     if not chunks:
                         continue
                     embeddings = embed_documents([c["text"] for c in chunks])
                     add_chunks(chunks, embeddings, digest)
                     known.add(digest)
-                    print(f"[STARTUP] Auto-indexed {len(chunks)} chunks from '{doc_file.name}'.")
+                    print(f"[STARTUP] Indexed {len(chunks)} chunks from '{doc_file.name}' ({visibility}).")
                 except Exception as e:
                     print(f"[STARTUP] Warning: Could not index '{doc_file.name}': {e}")
-
-            # Ensure public notices and circulars have explicit 'public' visibility in ChromaDB
-            try:
-                from src.vectorstore import update_source_visibility, stats
-                st = stats()
-                for doc in st.get("source_details", []):
-                    name_lower = doc["name"].lower()
-                    if any(pub_word in name_lower for pub_word in ("public", "circular", "notice", "schedule")):
-                        if doc.get("visibility") != "public":
-                            update_source_visibility(doc["name"], "public")
-                            print(f"[STARTUP] Updated visibility of '{doc['name']}' to public.")
-            except Exception as ve:
-                print(f"[STARTUP] Visibility sync notice: {ve}")
     except Exception as ex:
         print(f"[STARTUP] Notice: auto_sync_startup skipped: {ex}")
 
@@ -947,26 +969,16 @@ def index():
         
         # Scope Path A: Student Scope (Restricted to own row and public notices)
         if scope.sql_mode() == "own_record":
-            if is_aggregate_query(query):
-                answer = (
-                    "**Access Restricted:** Institutional aggregates, batch statistics, and peer rankings "
-                    "are confidential and reserved for Placement Officers. "
-                    "You may ask questions about placement eligibility criteria, company visit schedules, "
-                    "or your personal placement profile."
-                )
+            if is_student_restricted_query(query, scope.bound_student_id()):
+                answer = STUDENT_RESTRICTED_NOTICE
                 results = []
             else:
-                res = execute_student_scoped_query(
+                final_prompt, sql_q, sql_res, citations, instant_answer = execute_student_scoped_query(
                     query=query,
                     student_id=scope.bound_student_id(),
                     documents_dir=DOCUMENTS_DIR,
                     model_name=selected_model
                 )
-                if len(res) == 5:
-                    final_prompt, sql_q, sql_res, citations, instant_answer = res
-                else:
-                    final_prompt, sql_q, sql_res, citations = res
-                    instant_answer = None
 
                 if instant_answer:
                     answer = instant_answer
@@ -1220,6 +1232,8 @@ def api_upload():
                 
                 if is_ajax:
                     yield json.dumps({"status": "progress", "message": f"Saving {filename} to database..."}) + "\n"
+                # Replacing a same-named file: drop its old chunks so none outlive the new version
+                delete_source_chunks(filename)
                 add_chunks(chunks, embeddings, digest)
 
                 save_path = Path(DOCUMENTS_DIR) / filename
@@ -1428,28 +1442,17 @@ def api_stream_query():
             # Path A: Authenticated Student Scope (Zero-Trust Row-Level Isolation)
             # -------------------------------------------------------------
             if scope_sql_mode == "own_record":
-                if is_aggregate_query(query):
-                    notice_msg = (
-                        "**Access Restricted:** Institutional aggregates, batch statistics, and peer rankings "
-                        "are confidential and reserved for Placement Officers. "
-                        "You may ask questions about placement eligibility criteria, company visit schedules, "
-                        "or your personal placement profile."
-                    )
-                    yield f"data: {json.dumps({'type': 'context', 'citations': []}, default=str)}\n\n"
-                    yield f"data: {json.dumps({'token': notice_msg}, default=str)}\n\n"
+                if is_student_restricted_query(query, scope_bound_student_id):
+                    yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': []}, default=str)}\n\n"
+                    yield f"data: {json.dumps({'token': STUDENT_RESTRICTED_NOTICE}, default=str)}\n\n"
                     return
 
-                res = execute_student_scoped_query(
+                final_prompt, sql_q, sql_res, citations, instant_answer = execute_student_scoped_query(
                     query=query,
                     student_id=scope_bound_student_id,
                     documents_dir=DOCUMENTS_DIR,
                     model_name=model
                 )
-                if len(res) == 5:
-                    final_prompt, sql_q, sql_res, citations, instant_answer = res
-                else:
-                    final_prompt, sql_q, sql_res, citations = res
-                    instant_answer = None
 
                 if instant_answer:
                     yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Direct Verified Registry Lookup']}, default=str)}\n\n"
@@ -1458,10 +1461,12 @@ def api_stream_query():
                     return
 
                 if final_prompt:
-                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': ['Universal Structured Execution (SQLite)']}, default=str)}\n\n"
+                    # LLM-synthesised eligibility answer: hand the real record + circular texts to the
+                    # client so the NLI trust layer verifies it, instead of a blanket SQL 100% badge.
+                    context_texts = [c["text"] for c in citations]
+                    yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': context_texts}, default=str)}\n\n"
                     for stream_chunk in generate_ollama_stream(prompt=final_prompt, model_name=model):
                         yield stream_chunk
-                    yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}}, default=str)}\n\n"
                     return
 
                 # Semantic Vector Search: Strictly visibility='public'
@@ -1549,8 +1554,12 @@ async def api_verify_trust():
     if not draft_answer or not context_texts:
         return jsonify({"score": 100, "claims": []})
         
-    from src.trust_layer import verify_claims
-    verification = await run_in_threadpool(verify_claims, draft_answer, context_texts)
+    try:
+        from src.trust_layer import verify_claims
+        verification = await run_in_threadpool(verify_claims, draft_answer, context_texts)
+    except Exception as e:
+        print(f"[TRUST LAYER] Verification unavailable: {e}")
+        return jsonify({"status": "error", "message": "Trust verification is temporarily unavailable."}), 503
     return jsonify(verification)
 
 

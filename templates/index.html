@@ -1520,6 +1520,7 @@
         const startTime = performance.now();
         let accumulatedMarkdown = "";
         let currentContextTexts = [];
+        let serverVerified = false;
 
         try {
             const response = await fetch('/api/stream_query', {
@@ -1548,12 +1549,16 @@
 
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
+                if (!done) {
+                    buffer += decoder.decode(value, { stream: true });
+                } else {
+                    // Flush the decoder and terminate any final event lacking its trailing blank line
+                    buffer += decoder.decode() + '\n\n';
+                }
 
                 buffer = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
                 const parts = buffer.split('\n\n');
-                buffer = parts.pop();
+                buffer = done ? '' : parts.pop();
 
                 for (const part of parts) {
                     const lines = part.split('\n');
@@ -1627,6 +1632,7 @@
                             
                             // Verification Event
                             if (data.type === 'verification') {
+                                serverVerified = true;
                                 renderTrustScoreBadge(data.result);
                             }
 
@@ -1639,6 +1645,7 @@
                     }
                 }
             }
+            if (done) break;
         }
 
             // Final formatting pass (remove cursor blink)
@@ -1666,7 +1673,7 @@
             
             // Kick off background Trust Layer Verification
             const trustEnabled = document.getElementById('trust-checkbox') ? document.getElementById('trust-checkbox').checked : true;
-            if (mode === 'rag' && currentContextTexts.length > 0 && trustEnabled) {
+            if (mode === 'rag' && !serverVerified && currentContextTexts.length > 0 && trustEnabled) {
                 const isSqlExecution = currentContextTexts[0] && (currentContextTexts[0].includes("Structured Execution") || currentContextTexts[0].includes("Universal Structured Execution"));
                 
                 if (isSqlExecution) {
@@ -1763,6 +1770,11 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ answer: answer, context_texts: contextTexts })
             });
+            if (!response.ok) {
+                // Never fall back to a default 100% badge when verification did not actually run
+                if (container) container.innerHTML = '';
+                return;
+            }
             const res = await response.json();
             renderTrustScoreBadge(res);
         } catch (err) {

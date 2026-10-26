@@ -25,10 +25,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# The backend has no GPU reservation (only Ollama does), so install the CPU-only torch wheel
+# first; it avoids pulling multi-GB CUDA libraries that would never be used in this container.
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir torch --extra-index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir -r requirements.txt
+
+# Bake the embedding model, NLI trust-layer model and sentence tokenizer into the image so the
+# backend runs fully offline and a recreated container does not re-download them at request time.
+ARG EMBEDDING_MODEL_NAME=BAAI/bge-small-en-v1.5
+ENV NLTK_DATA=/usr/local/share/nltk_data
+RUN python -c "import nltk; nltk.download('punkt_tab', download_dir='/usr/local/share/nltk_data', quiet=True, raise_on_error=True)" \
+ && python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; SentenceTransformer('${EMBEDDING_MODEL_NAME}'); CrossEncoder('cross-encoder/nli-deberta-v3-small')"
+
+# Models are baked in above: never contact the Hugging Face Hub at runtime
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
 
 # Copy application source
 COPY . .
+
+# Keep a pristine copy of the bundled sample documents: /app/documents is shadowed by the
+# documents_data named volume, so startup seeds any missing files from here (once per file).
+RUN cp -r /app/documents /app/seed_documents
 
 # Expose web application port
 EXPOSE 5000
