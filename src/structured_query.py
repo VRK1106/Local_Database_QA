@@ -41,8 +41,144 @@ def is_aggregate_query(query: str) -> bool:
     extract_pattern = r'\b(show me all|list all|find all|which \w+|who (has|have|had)|whose|filter by)\b'
     if re.search(extract_pattern, query_lower):
         return True
-        
+
     return False
+
+
+# -------------------------------------------------------------------------
+# Student intent classification
+# -------------------------------------------------------------------------
+# Students need a narrower guard than is_aggregate_query(): words such as
+# "last", "first", "which", "top" or "over" appear in ordinary questions about
+# circulars ("last date to register", "which companies are visiting"), so the
+# aggregate block only applies when the question targets other people's records.
+
+_FIRST_PERSON_RE = re.compile(r"\b(my|mine|me|myself|i|i'm|im|i've|am i|do i|can i|have i)\b")
+
+_PERSONAL_FIELD_RE = re.compile(
+    r"\b(cgpa|gpa|backlogs?|arrears?|profile|record|internships?|speciali[sz]ation|branch|department|placed|marks|percentage)\b"
+    r"|\bplacement status\b"
+)
+
+_PUBLIC_TOPIC_RE = re.compile(
+    r"\b(eligib\w*|criteria|cut-?off|company|companies|circular|notice|policy|policies|drive|drives|rules?|"
+    r"ctc|package|salary|stipend|compensation|deadline|date|dates|schedule|registration|register|"
+    r"venue|location|interview|rounds?|selection|assessment|test|dress|attire|resume|documents?|"
+    r"training|role|designation|recruit\w*|apex|tcs|infosys|wipro|visiting|hiring|bond|probation|"
+    r"required|requirements?|needed|allowed)\b"
+)
+
+_PEER_TARGET_RE = re.compile(
+    r"\b(students|classmates?|peers?|batch|batchmates?|everyone|everybody|others|other students?|"
+    r"friends?|people|candidates|toppers?|class)\b"
+)
+
+_PEER_STATS_RE = re.compile(
+    r"\b(how many|count|number of|average|mean|total|sum|percentage of|placement rate|"
+    r"rank|ranking|ranked|topper|highest|lowest|maximum|minimum|top \d+|bottom \d+|"
+    r"list|who (?:has|have|had|got|is|are)|whose|which students?|compare|comparison)\b"
+)
+
+_ELIGIBILITY_RE = re.compile(
+    r"\b(eligib\w*|qualif\w*|apply|applying|can i|could i|am i allowed|allowed to|meet|meets|criteria|cut-?off|"
+    r"sit for|attend|participate)\b"
+)
+
+_FIELD_STATS_RE = re.compile(
+    r"\b(how many|count|number of|average|mean|total|sum|rank|highest|lowest|top \d+|list|who|whose|compare)\b"
+)
+
+_STUDENT_ID_RE = re.compile(r"\b(stu\d{2,})\b", re.IGNORECASE)
+
+_names_cache: list[tuple[str, str]] | None = None
+_names_cache_time = 0.0
+
+
+def _known_student_names() -> list[tuple[str, str]]:
+    """Return cached (student_id, lowercase name) pairs used to detect cross-student lookups."""
+    global _names_cache, _names_cache_time
+    import time
+    now = time.time()
+    if _names_cache is not None and (now - _names_cache_time) < 60.0:
+        return _names_cache
+    pairs = []
+    try:
+        from src.auth import get_all_student_records
+        for rec in get_all_student_records():
+            sid = str(rec.get("student_id") or "").strip()
+            name = str(rec.get("name") or "").strip().lower()
+            if sid and name and name != sid.lower():
+                pairs.append((sid, name))
+    except Exception:
+        pairs = _names_cache or []
+    _names_cache = pairs
+    _names_cache_time = now
+    return pairs
+
+
+def mentions_other_student(query: str, own_student_id: str) -> bool:
+    """True if the query names a student ID or a registered student name other than the caller's own."""
+    own = (own_student_id or "").strip().lower()
+    query_lower = query.lower()
+    for sid in _STUDENT_ID_RE.findall(query_lower):
+        if sid.lower() != own:
+            return True
+    for sid, name in _known_student_names():
+        if sid.lower() != own and re.search(rf"\b{re.escape(name)}\b", query_lower):
+            return True
+    return False
+
+
+def is_student_restricted_query(query: str, own_student_id: str) -> bool:
+    """
+    Student-scope guard: True when the question asks for batch statistics, rankings, peer
+    comparisons, or another named student's record. Questions about circulars, schedules,
+    company drives or the student's own record are allowed through.
+    """
+    query_lower = query.lower()
+    if mentions_other_student(query, own_student_id):
+        return True
+    if _PEER_TARGET_RE.search(query_lower) and _PEER_STATS_RE.search(query_lower):
+        return True
+    # Statistics over record fields without a first-person anchor ("who has the highest CGPA?",
+    # "average backlogs"); cutoff questions ("minimum CGPA required") are left to the circulars.
+    if (_PERSONAL_FIELD_RE.search(query_lower) and _FIELD_STATS_RE.search(query_lower)
+            and not _FIRST_PERSON_RE.search(query_lower) and not _PUBLIC_TOPIC_RE.search(query_lower)):
+        return True
+    # Ranking-style questions about oneself still reveal peer data ("what is my rank in the batch?")
+    if re.search(r"\b(rank|ranking|ranked|percentile|topper)\b", query_lower):
+        return True
+    return False
+
+
+def classify_student_query(query: str) -> str:
+    """
+    Route an (already permitted) student question:
+      'profile'     - only about the student's own record  -> deterministic answer, no LLM
+      'eligibility' - own record combined with circulars    -> LLM over record + public chunks
+      'public'      - general question about public notices -> public-only RAG
+    """
+    query_lower = query.lower()
+    first_person = bool(_FIRST_PERSON_RE.search(query_lower))
+    personal_field = bool(_PERSONAL_FIELD_RE.search(query_lower))
+    public_topic = bool(_PUBLIC_TOPIC_RE.search(query_lower))
+
+    if first_person and _ELIGIBILITY_RE.search(query_lower):
+        return "eligibility"
+    if first_person and personal_field:
+        return "profile"
+    if public_topic:
+        # First-person questions about circular content ("what should I carry?") are public RAG
+        return "public"
+    if first_person or personal_field:
+        return "profile"
+    return "public"
+
+
+def _clean_record_for_display(rec: dict) -> dict:
+    """Drop bookkeeping columns before a record is shown to the student or sent to the LLM."""
+    hidden = {"id", "updated_at", "CGPA", "Branch", "Department", "Backlogs", "Placed_Company"}
+    return {k: v for k, v in rec.items() if k not in hidden and v not in (None, "")}
 
 def prepare_dataframe_for_sql(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -326,36 +462,30 @@ def execute_universal_structured_query(query: str, documents_dir: Path, selected
 def execute_student_scoped_query(query: str, student_id: str, documents_dir: Path, model_name: str):
     """
     Ironclad row-level student scoping:
-    Executes a hardcoded, parameterized query strictly bound to the authenticated student_id.
-    Bypasses LLM SQL generation, completely preventing cross-student data exfiltration.
-    Returns (final_prompt, sql_query, sql_result, citations) or (None, None, None, []).
+    Looks up only the record bound to the authenticated student_id (never LLM-generated SQL),
+    then routes by intent (see classify_student_query):
+      - 'profile'     -> deterministic instant answer from the verified record (no LLM)
+      - 'eligibility' -> prompt combining the record with public circular chunks
+      - 'public'      -> not handled here; caller falls back to public-only RAG
+    Returns (final_prompt, sql_query, sql_result, citations, instant_answer); all empty when not applicable.
     """
     import json
+    empty = (None, None, None, [], None)
     if not student_id:
-        return None, None, None, []
+        return empty
 
-    # Only invoke row-level personal DB query if the query asks about self/record
-    personal_keywords = [
-        "my", "mine", "me", "i", "cgpa", "gpa", "marks", "grade", "score",
-        "backlog", "placed", "placement", "offer", "package", "salary",
-        "eligib", "status", "profile", "record", "details", "resume"
-    ]
-    query_lower = query.lower()
-    is_personal_intent = any(k in query_lower.split() or k in query_lower for k in personal_keywords) or (student_id.lower() in query_lower)
-    if not is_personal_intent:
-        return None, None, None, []
+    intent = classify_student_query(query)
+    if intent == "public":
+        return empty
 
-    # 1. High-Performance Fast-Path: Query authoritative PostgreSQL student_records (<1ms)
+    # 1. Authoritative relational record (PostgreSQL / SQLite student_records)
     student_record = None
-    safe_sql = None
-    row = None
-    citations = []
-
+    safe_sql = "SELECT * FROM student_records WHERE LOWER(TRIM(student_id)) = %s LIMIT 1;"
+    source_label = "PostgreSQL (student_records)"
     try:
         from src.auth import get_student_record_by_id
         db_rec = get_student_record_by_id(student_id)
         if db_rec:
-            # Convert non-serializable objects (datetime, Decimal) to JSON-safe primitives
             student_record = {}
             for k, v in db_rec.items():
                 if hasattr(v, 'isoformat'):
@@ -364,135 +494,100 @@ def execute_student_scoped_query(query: str, student_id: str, documents_dir: Pat
                     student_record[k] = float(v)
                 else:
                     student_record[k] = v
-
-            # Ensure normalized canonical aliases
-            student_record["CGPA"] = student_record.get("cgpa", 0.0)
-            student_record["Branch"] = student_record.get("specialization", "Computer Science")
-            student_record["Backlogs"] = student_record.get("backlogs", 0)
-            student_record["Placed_Company"] = student_record.get("placed_company") or student_record.get("placement_status") or "Not Placed"
-            safe_sql = f"SELECT * FROM student_records WHERE LOWER(TRIM(student_id)) = '{student_id.strip().lower()}' LIMIT 1;"
-            row = [str(x) if hasattr(x, 'isoformat') else x for x in student_record.values()]
-            citations.append({
-                "source": "PostgreSQL (student_records)",
-                "page": 1,
-                "score": 1.0,
-                "text": f"Authenticated Student Record ({student_id}): {student_record}"
-            })
     except Exception:
         student_record = None
 
-    # 2. Fallback to scanning uploaded documents if not present in primary Postgres table
+    # 2. Fallback: scan uploaded structured documents for the caller's own row
     if not student_record:
-        tmp_path, conn, table_schemas = build_universal_sqlite_db(documents_dir, None)
-        if not table_schemas:
-            if conn:
-                conn.close()
-            try:
-                os.remove(tmp_path)
-            except:
-                pass
-            return None, None, None, []
+        rec = get_student_record(student_id, documents_dir)
+        if rec:
+            student_record = rec
+            source_label = "Uploaded student roster"
 
-        # Find table with student identifier column
-        target_table = None
-        id_column = None
-        for t_name, info in table_schemas.items():
-            for col in info["samples"].keys():
-                if col.lower() in ["student_id", "usn", "roll_number", "roll_no", "id", "reg_no"]:
-                    target_table = t_name
-                    id_column = col
-                    break
-            if target_table:
-                break
+    if not student_record:
+        if intent == "profile":
+            msg = (
+                f"No verified academic record is registered for your student ID (`{student_id}`) yet. "
+                f"Please contact the Placement Office, or raise a ticket under **Issue Resolver**, so your record can be added."
+            )
+            return None, None, None, [], msg
+        return empty
 
-        if not target_table or not id_column:
-            conn.close()
-            try:
-                os.remove(tmp_path)
-            except:
-                pass
-            return None, None, None, []
+    display_record = _clean_record_for_display(student_record)
+    citations = [{
+        "source": source_label,
+        "page": 1,
+        "score": 1.0,
+        "text": f"Verified student record for {student_id}: " + "; ".join(f"{k}: {v}" for k, v in display_record.items())
+    }]
+    row = list(display_record.values())
 
-        safe_sql = f"SELECT * FROM \"{target_table}\" WHERE LOWER(TRIM(\"{id_column}\")) = ? LIMIT 1;"
-        cur = conn.cursor()
-        cur.execute(safe_sql, (student_id.strip().lower(),))
-        row = cur.fetchone()
-        col_names = [description[0] for description in cur.description] if cur.description else []
-        conn.close()
-        try:
-            os.remove(tmp_path)
-        except:
-            pass
+    # 3. Instant profile resolution: deterministic, no LLM latency or hallucination risk
+    if intent == "profile":
+        name = display_record.get("name", student_id)
+        status = display_record.get("placement_status") or "Not Placed"
+        company = display_record.get("placed_company")
+        backlogs = display_record.get("backlogs", 0)
+        if company:
+            status_line = f"**{status}** at **{company}**"
+        elif str(status).lower() in ("not placed", "eligible", ""):
+            status_line = f"**{status}** *(Eligible for upcoming recruitment drives)*"
+        else:
+            status_line = f"**{status}**"
+        backlog_line = f"{backlogs} *(Clear academic record)*" if str(backlogs) in ("0", "0.0", "None") else f"**{backlogs} active backlog(s)**"
 
-        if not row:
-            return None, None, None, []
+        lines = [
+            f"- **Cumulative GPA (CGPA):** **{display_record.get('cgpa', '—')}** / 10.0",
+            f"- **Placement Status:** {status_line}",
+            f"- **Department / Specialization:** {display_record.get('specialization', '—')}",
+            f"- **Active Backlogs:** {backlog_line}",
+        ]
+        if display_record.get("tenth_percent") is not None:
+            lines.append(f"- **10th Aggregate:** {display_record['tenth_percent']}%")
+        if display_record.get("twelfth_percent") is not None:
+            lines.append(f"- **12th / Diploma Aggregate:** {display_record['twelfth_percent']}%")
+        if "internships" in display_record:
+            lines.append(f"- **Internships Completed:** {display_record['internships']}")
+        instant_answer = (
+            f"Hello **{name}** (`{student_id}`),\n\n"
+            f"Here is your verified academic and placement status directly from the official registry:\n\n"
+            + "\n".join(lines)
+            + "\n\n> *Tip: Ask about eligibility for a drive (e.g. \"Am I eligible for the Apex drive?\") to check your record against the latest circulars.*"
+        )
+        return None, safe_sql, [row], citations, instant_answer
 
-        student_record = dict(zip(col_names, row))
-        citations.append({
-            "source": table_schemas[target_table]["source_file"],
-            "page": 1,
-            "score": 1.0,
-            "text": f"Authenticated Student Record ({student_id}): {student_record}"
-        })
-
-    # 3. Context Enrichment: If student query inquires about placement eligibility, rules, or circulars,
-    # retrieve official public circulars from ChromaDB (visibility='public')
+    # 4. Eligibility: combine the verified record with public circulars only (visibility='public')
     public_context = ""
-    public_keywords = ["eligib", "criteria", "company", "circular", "policy", "drive", "rules", "cutoff", "package", "ctc"]
-    if any(k in query_lower for k in public_keywords):
-        try:
-            from src.embeddings import embed_query
-            from src.vectorstore import search
-            q_vec = embed_query(query)
-            public_chunks = search(query_embedding=q_vec, top_k=2, visibility="public")
-            if public_chunks:
-                public_context = "\n\nOfficial Public Placement Notices & Eligibility Criteria:\n" + "\n---\n".join([c["text"] for c in public_chunks])
-                for c in public_chunks:
-                    citations.append({
-                        "source": c.get("source", "Public Placement Circular"),
-                        "page": c.get("page", 1),
-                        "score": c.get("similarity", 1.0),
-                        "text": c.get("text", "")[:250]
-                    })
-        except Exception:
-            pass
+    try:
+        from src.embeddings import embed_query
+        from src.vectorstore import search
+        q_vec = embed_query(query)
+        public_chunks = search(query_embedding=q_vec, top_k=3, visibility="public")
+        if public_chunks:
+            public_context = "\n\nOfficial Public Placement Notices:\n" + "\n---\n".join(c["text"] for c in public_chunks)
+            for c in public_chunks:
+                citations.append({
+                    "source": c.get("source", "Public Placement Circular"),
+                    "page": c.get("page", 1),
+                    "score": c.get("score", 1.0),
+                    "text": c.get("text", "")
+                })
+    except Exception as e:
+        print(f"[STUDENT QUERY] Public circular retrieval failed: {e}")
 
     final_prompt = (
         f"You are the Placement Office Assistant answering an authenticated student whose verified ID is '{student_id}'.\n"
         f"The student asks: '{query}'\n\n"
-        f"Verified student's personal record from the official database:\n{json.dumps(student_record, indent=2, default=str)}"
-        f"{public_context}\n\n"
-        f"Security & Privacy Directives:\n"
-        f"1. You may ONLY discuss and display personal records concerning this verified student (ID: '{student_id}').\n"
-        f"2. If the student asks about any other student, their classmates' CGPA, ranks, or aggregate university statistics, strictly refuse and inform them that cross-student records are confidential.\n"
-        f"3. Provide a helpful, clear, precise, and reassuring response answering the student's question directly based strictly on their official record and any attached public circulars above."
+        f"Verified student's personal record from the official database:\n{json.dumps(display_record, indent=2, default=str)}"
+        f"{public_context or chr(10) + chr(10) + 'No public circular matched this question.'}\n\n"
+        f"Rules:\n"
+        f"1. Use ONLY the record and notices above. Do not assume any fact that is not written there "
+        f"(for example degree, 10th/12th marks or gap years); if a criterion cannot be checked from the record, say so explicitly.\n"
+        f"2. Compare each stated criterion against the record and conclude clearly (eligible / not eligible / cannot be fully confirmed).\n"
+        f"3. Discuss only this student's own record. Never reveal or estimate other students' data.\n"
+        f"4. Be concise and use short bullet points."
     )
-
-    # 4. Instant Profile Resolution (Zero-Latency Fast Path):
-    # If the student's query is asking exclusively about their personal verified metrics (CGPA, placement status,
-    # backlogs, branch) without requiring RAG synthesis over circulars or recruitment drives, resolve deterministically in < 1ms.
-    instant_answer = None
-    if not public_context and student_record:
-        name = student_record.get("name", student_id)
-        cgpa = student_record.get("CGPA") or student_record.get("cgpa", "—")
-        status = student_record.get("Placed_Company") or student_record.get("placement_status", "Not Placed")
-        dept = student_record.get("Branch") or student_record.get("specialization", "Computer Science")
-        backlogs = student_record.get("Backlogs", student_record.get("backlogs", 0))
-        
-        status_badge = f"**{status}**" if status not in ("Not Placed", "None", "") else "**Not Placed** *(Eligible for upcoming recruitment drives)*"
-        backlog_badge = f"{backlogs} *(Clear academic record)*" if str(backlogs) in ("0", "None") else f"**{backlogs} active backlogs**"
-        
-        instant_answer = (
-            f"Hello **{name}** (`{student_id}`),\n\n"
-            f"Here is your verified academic and placement status directly from the official registry:\n\n"
-            f"- **Cumulative GPA (CGPA):** **{cgpa}** / 10.0\n"
-            f"- **Placement Status:** {status_badge}\n"
-            f"- **Department / Branch:** {dept}\n"
-            f"- **Active Backlogs:** {backlog_badge}\n\n"
-            f"> *Tip: You can query upcoming company eligibility criteria and schedules by selecting circulars under **Target Documents**.*"
-        )
-
-    return final_prompt, safe_sql, [row], citations, instant_answer
+    return final_prompt, safe_sql, [row], citations, None
 
 
 def get_student_record(student_id: str, documents_dir: Path) -> dict | None:
