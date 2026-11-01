@@ -1842,78 +1842,178 @@
         }
     }
 
-    // Voice Query Automation Pipeline
-    let isVoiceTypingMode = false;
-    let voiceTypingTimer = null;
+    // Voice Query Automation Pipeline (HTML5 Web Speech API + Audio Volume Visualizer)
+    let recognition = null;
+    let isListening = false;
+    let audioContext = null;
+    let analyser = null;
+    let micStream = null;
+    let animFrameId = null;
 
-    async function toggleVoiceSearch() {
-        const queryInput = document.getElementById('query-input');
-        const banner = document.getElementById('voice-status-banner');
-        const bannerText = document.getElementById('voice-status-text');
-        const micIcon = document.getElementById('mic-icon');
+    function initSpeechRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) return null;
+        
+        const rec = new SpeechRecognition();
+        rec.continuous = false;
+        rec.interimResults = true;
+        rec.lang = 'en-US';
 
-        isVoiceTypingMode = true;
+        rec.onstart = function() {
+            isListening = true;
+            updateVoiceUI(true, "Listening to your voice... Speak your question.");
+            startVolumeMeter();
+        };
 
-        // Focus the input box automatically
-        if (queryInput) {
-            queryInput.focus();
-        }
+        rec.onresult = function(event) {
+            let interimTranscript = '';
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            const queryInput = document.getElementById('query-input');
+            if (queryInput) {
+                queryInput.value = finalTranscript || interimTranscript;
+            }
+            const bannerText = document.getElementById('voice-status-text');
+            if (bannerText && (finalTranscript || interimTranscript)) {
+                bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>Transcribing:</strong> ' + (finalTranscript || interimTranscript);
+            }
+        };
 
-        if (micIcon) {
-            micIcon.className = "fa-solid fa-microphone-lines fa-bounce";
-            micIcon.style.color = "var(--accent-cyan)";
-        }
+        rec.onerror = function(event) {
+            console.warn("Speech recognition error:", event.error);
+            stopVoiceSearch();
+        };
 
-        // Show the instruction banner
-        if (banner && bannerText) {
-            banner.style.display = 'block';
-            banner.style.background = 'rgba(6, 182, 212, 0.15)';
-            banner.style.border = '1px solid var(--accent-cyan)';
-            banner.style.color = 'var(--accent-cyan)';
-            bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>OFFLINE VOICE ENGINE ACTIVE:</strong> Speak now. Auto-submits after 2.5s pause.';
-        }
+        rec.onend = function() {
+            stopVoiceSearch();
+            const queryInput = document.getElementById('query-input');
+            if (queryInput && queryInput.value.trim() !== '') {
+                const form = document.getElementById('qa-form');
+                if (form) {
+                    form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true }));
+                }
+            }
+        };
 
-        // Automatically trigger Windows native Dictation (Win+H)
+        return rec;
+    }
+
+    async function startVolumeMeter() {
         try {
-            await fetch('/api/trigger_voice_typing');
-        } catch (err) {
-            console.error("Trigger voice typing error:", err);
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(micStream);
+            source.connect(analyser);
+            analyser.fftSize = 64;
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            function updateMeter() {
+                if (!isListening) return;
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                let avg = sum / dataArray.length;
+                let pct = Math.min(100, Math.round((avg / 128) * 100));
+                
+                const bar = document.getElementById('mic-volume-bar');
+                const val = document.getElementById('volume-val');
+                if (bar) bar.style.width = pct + '%';
+                if (val) val.textContent = `Mic Input: ${pct}%`;
+                
+                animFrameId = requestAnimationFrame(updateMeter);
+            }
+            updateMeter();
+        } catch(e) {
+            // Audio meter optional
         }
     }
 
-    // Auto-Submit Debounce Handler (2.5 Seconds of Silence/Pause)
-    document.getElementById('query-input')?.addEventListener('input', function(e) {
-        if (!isVoiceTypingMode) return;
-        
-        clearTimeout(voiceTypingTimer);
+    function stopVolumeMeter() {
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+        if (micStream) {
+            micStream.getTracks().forEach(t => t.stop());
+            micStream = null;
+        }
+        if (audioContext && audioContext.state !== 'closed') {
+            try { audioContext.close(); } catch(e) {}
+            audioContext = null;
+        }
+        const bar = document.getElementById('mic-volume-bar');
+        const val = document.getElementById('volume-val');
+        if (bar) bar.style.width = '0%';
+        if (val) val.textContent = 'Mic Input: 0%';
+    }
 
+    function updateVoiceUI(active, text) {
+        const banner = document.getElementById('voice-status-banner');
         const bannerText = document.getElementById('voice-status-text');
-        if (bannerText) {
-            bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>Hearing Voice Input...</strong> Auto-submitting in 2.5s...';
+        const micIcon = document.getElementById('mic-icon');
+        if (active) {
+            if (micIcon) {
+                micIcon.className = "fa-solid fa-microphone-lines fa-bounce";
+                micIcon.style.color = "var(--accent-cyan)";
+            }
+            if (banner && bannerText) {
+                banner.style.display = 'block';
+                banner.style.background = 'rgba(6, 182, 212, 0.15)';
+                banner.style.border = '1px solid var(--accent-cyan)';
+                banner.style.color = 'var(--accent-cyan)';
+                bannerText.innerHTML = `<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>ACTIVE:</strong> ${text}`;
+            }
+        } else {
+            if (banner) banner.style.display = 'none';
+            if (micIcon) {
+                micIcon.className = "fa-solid fa-microphone";
+                micIcon.style.color = "";
+            }
+        }
+    }
+
+    function toggleVoiceSearch() {
+        const queryInput = document.getElementById('query-input');
+        if (queryInput) queryInput.focus();
+
+        if (isListening) {
+            if (recognition) recognition.stop();
+            stopVoiceSearch();
+            return;
         }
 
-        voiceTypingTimer = setTimeout(() => {
-            if (this.value.trim() !== '') {
-                isVoiceTypingMode = false;
+        if (!recognition) {
+            recognition = initSpeechRecognition();
+        }
 
-                // Dismiss Windows Dictation Toolbar (Esc)
-                try { fetch('/api/stop_voice_typing'); } catch (err) {}
-
-                const banner = document.getElementById('voice-status-banner');
-                if (banner) banner.style.display = 'none';
-
-                const micIcon = document.getElementById('mic-icon');
-                if (micIcon) {
-                    micIcon.className = "fa-solid fa-microphone";
-                    micIcon.style.color = "";
-                }
-
-                // Submit Form
-                const submitBtn = document.getElementById('submit-btn');
-                if (submitBtn) submitBtn.click();
+        if (recognition) {
+            try {
+                recognition.start();
+            } catch(e) {
+                console.error("Speech recognition error:", e);
+                stopVoiceSearch();
             }
-        }, 2500);
-    });
+        } else {
+            // Fallback for browsers without Web Speech API
+            updateVoiceUI(true, "Offline Dictation mode active. Speak now...");
+            fetch('/api/trigger_voice_typing').catch(() => {});
+            setTimeout(() => {
+                updateVoiceUI(false, "");
+            }, 5000);
+        }
+    }
+
+    function stopVoiceSearch() {
+        isListening = false;
+        updateVoiceUI(false, "");
+        stopVolumeMeter();
+        fetch('/api/stop_voice_typing').catch(() => {});
+    }
 
     // Quick Question Suggestion Dispatcher
     function applySuggestion(text) {

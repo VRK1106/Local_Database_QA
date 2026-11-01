@@ -536,7 +536,7 @@ def admin_users_page():
 
 
 @app.route('/admin/create_user', methods=['POST'])
-@login_required
+@permission_required('users.import_students')
 def admin_create_user():
     """Register individual student or placement account (strictly guarded against unauthorized privilege escalation)."""
     username = request.form.get('username', '').strip()
@@ -1470,6 +1470,25 @@ def api_stream_query():
                     return
 
                 # Semantic Vector Search: Strictly visibility='public'
+                if mode == 'search_only':
+                    query_vec = embed_query(query)
+                    context_chunks = search(
+                        query_embedding=query_vec,
+                        top_k=top_k,
+                        source_filters=sources if sources else None,
+                        threshold=0.0,
+                        visibility="public"
+                    )
+                    yield f"data: {json.dumps({'type': 'context', 'citations': [], 'context_texts': [c['text'] for c in context_chunks]}, default=str)}\n\n"
+                    if not context_chunks:
+                        yield f"data: {json.dumps({'token': 'No relevant public document matches found for this query in the vector store.'}, default=str)}\n\n"
+                    else:
+                        out = "### 🔍 Vector Retrieval Results (Public Documents)\n\n"
+                        for i, c in enumerate(context_chunks, 1):
+                            out += f"**Match {i}:** `{c['source']}` (Score: {c.get('score', 0):.3f})\n> {c['text'].strip()}\n\n"
+                        yield f"data: {json.dumps({'token': out}, default=str)}\n\n"
+                    return
+
                 context_chunks = []
                 if mode == 'rag':
                     query_vec = embed_query(query)
@@ -1507,6 +1526,30 @@ def api_stream_query():
                         yield stream_chunk
                     yield f"data: {json.dumps({'type': 'verification', 'result': {'score': 100, 'mode': 'sql'}}, default=str)}\n\n"
                     return
+
+            if mode == 'search_only':
+                query_vec = embed_query(query)
+                context_chunks = search(
+                    query_embedding=query_vec,
+                    top_k=top_k,
+                    source_filters=sources if sources else None
+                )
+                citations = [{
+                    "source": c["source"],
+                    "page": c["page"],
+                    "score": c["score"],
+                    "text": c["text"]
+                } for c in context_chunks]
+                yield f"data: {json.dumps({'type': 'context', 'citations': citations, 'context_texts': [c['text'] for c in context_chunks]}, default=str)}\n\n"
+                if not context_chunks:
+                    yield f"data: {json.dumps({'token': 'No relevant document matches found for this query in the vector store.'}, default=str)}\n\n"
+                else:
+                    out = "### 🔍 Vector k-NN Retrieval Results\n\n"
+                    for i, c in enumerate(context_chunks, 1):
+                        p_info = f" (Page {c['page']})" if c.get('page') else ""
+                        out += f"**Match {i}:** `{c['source']}`{p_info} — *Score: {c.get('score', 0):.3f}*\n> {c['text'].strip()}\n\n"
+                    yield f"data: {json.dumps({'token': out}, default=str)}\n\n"
+                return
 
             context_chunks = []
             if mode == 'rag':
@@ -1566,11 +1609,8 @@ async def api_verify_trust():
 @app.route('/api/trigger_voice_typing', methods=['GET', 'POST'])
 @login_required
 def trigger_voice_typing():
-    """Trigger Windows Voice Typing (Win+H) using Win32 ctypes keybd_event or pyautogui fallback."""
+    """Trigger Windows Voice Typing if on native Windows host, or return success for Web Speech API in container."""
     import platform
-    success = False
-    err_msg = ""
-    
     if platform.system() == "Windows":
         try:
             import ctypes
@@ -1581,50 +1621,27 @@ def trigger_voice_typing():
             ctypes.windll.user32.keybd_event(0x48, 0, 2, 0)
             time.sleep(0.05)
             ctypes.windll.user32.keybd_event(0x5B, 0, 2, 0)
-            success = True
-        except Exception as e:
-            err_msg = str(e)
-
-    if not success and pyautogui is not None:
-        try:
-            pyautogui.hotkey('win', 'h')
-            success = True
-        except Exception as e:
-            err_msg = str(e)
-
-    if success:
-        return jsonify({"status": "success", "message": "Triggered Win+H"})
-    return jsonify({"status": "error", "message": err_msg or "Failed to trigger Win+H"}), 500
+            return jsonify({"status": "success", "message": "Triggered Win+H"})
+        except Exception:
+            pass
+    return jsonify({"status": "success", "message": "Voice typing ready via browser Web Speech API"})
 
 
 @app.route('/api/stop_voice_typing', methods=['GET', 'POST'])
 @login_required
 def stop_voice_typing():
-    """Dismiss Windows Dictation popup (Esc) using Win32 ctypes keybd_event or pyautogui fallback."""
+    """Dismiss Windows Dictation popup if on Windows, or return success for Web Speech API in container."""
     import platform
-    success = False
-    err_msg = ""
-
     if platform.system() == "Windows":
         try:
             import ctypes
             ctypes.windll.user32.keybd_event(0x1B, 0, 0, 0)
             time.sleep(0.05)
             ctypes.windll.user32.keybd_event(0x1B, 0, 2, 0)
-            success = True
-        except Exception as e:
-            err_msg = str(e)
-
-    if not success and pyautogui is not None:
-        try:
-            pyautogui.press('esc')
-            success = True
-        except Exception as e:
-            err_msg = str(e)
-
-    if success:
-        return jsonify({"status": "success", "message": "Triggered Esc"})
-    return jsonify({"status": "error", "message": err_msg or "Failed to trigger Esc"}), 500
+            return jsonify({"status": "success", "message": "Triggered Esc"})
+        except Exception:
+            pass
+    return jsonify({"status": "success", "message": "Voice typing stopped"})
 
 
 # =========================================================================

@@ -107,14 +107,20 @@ def can_user_access_ticket(user, ticket: dict) -> bool:
     """
     if not user or not user.is_authenticated:
         return False
-    if user.is_developer:
+
+    from flask import session, has_request_context
+    effective_role = user.role
+    if has_request_context() and session.get("view_as") and user.is_developer:
+        effective_role = session["view_as"].get("role", effective_role)
+
+    if effective_role == "developer":
         return True
     
     user_id = int(user.id)
-    if user.is_student:
+    if effective_role == "student":
         return ticket.get("creator_id") == user_id
     
-    if user.is_placement:
+    if effective_role == "placement":
         # Placement can see tickets assigned/targeted to placement cell, or tickets they filed
         return ticket.get("target_role") == "placement" or ticket.get("creator_id") == user_id
     
@@ -132,6 +138,11 @@ def get_tickets_for_user(
     if not user or not user.is_authenticated:
         return []
 
+    from flask import session, has_request_context
+    effective_role = user.role
+    if has_request_context() and session.get("view_as") and user.is_developer:
+        effective_role = session["view_as"].get("role", effective_role)
+
     conn = get_db_connection()
     cur = conn.cursor()
 
@@ -139,13 +150,13 @@ def get_tickets_for_user(
     params = []
 
     # RBAC Scoping
-    if user.is_student:
+    if effective_role == "student":
         conditions.append("creator_id = ?")
         params.append(int(user.id))
-    elif user.is_placement:
+    elif effective_role == "placement":
         conditions.append("(target_role = 'placement' OR creator_id = ?)")
         params.append(int(user.id))
-    elif user.is_developer:
+    elif effective_role == "developer":
         # Developers have global oversight over all tickets
         pass
 
