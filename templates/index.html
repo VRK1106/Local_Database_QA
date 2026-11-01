@@ -1842,16 +1842,31 @@
         }
     }
 
-    // Voice Query Automation Pipeline (HTML5 Web Speech API + Audio Activity Waveform)
+    // Voice Query Automation Pipeline (HTML5 Web Speech API + Audio Activity Waveform + Telemetry)
     let recognition = null;
     let isListening = false;
     let silenceTimer = null;
     let animFrameId = null;
     let hasSpoken = false;
+    let lastVoiceError = null;
+    let errorDisplayTimeout = null;
+
+    function sendVoiceTelemetry(event, error = '', info = '') {
+        try {
+            fetch('/api/voice_debug', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event: event, error: error, info: info })
+            }).catch(() => {});
+        } catch(e) {}
+    }
 
     function initSpeechRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return null;
+        if (!SpeechRecognition) {
+            sendVoiceTelemetry('unsupported_browser', 'No SpeechRecognition in window');
+            return null;
+        }
         
         const rec = new SpeechRecognition();
         rec.continuous = true;
@@ -1863,8 +1878,11 @@
         rec.onstart = function() {
             isListening = true;
             hasSpoken = false;
+            lastVoiceError = null;
+            clearTimeout(errorDisplayTimeout);
             finalTranscript = '';
-            updateVoiceUI(true, "Listening to your voice... Speak your question.");
+            sendVoiceTelemetry('rec_onstart');
+            updateVoiceUI(true, 'Listening... Speak now, or press <kbd style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;border:1px solid rgba(255,255,255,0.2);">Win + H</kbd> on Windows.');
             startVisualWaveform();
         };
 
@@ -1890,10 +1908,10 @@
                 bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>Hearing:</strong> ' + currentText;
             }
 
-            // Burst waveform when speech tokens arrive
             pulseWaveformActive();
+            sendVoiceTelemetry('rec_onresult', '', currentText.substring(0, 100));
 
-            // Auto-submit after 2.5 seconds of silence once speech has been detected
+            // Auto-submit after 2.5 seconds of silence once speech has been recognized
             clearTimeout(silenceTimer);
             if (hasSpoken) {
                 silenceTimer = setTimeout(() => {
@@ -1906,31 +1924,81 @@
         };
 
         rec.onerror = function(event) {
-            console.warn("Speech recognition event:", event.error);
+            console.warn("Speech recognition error event:", event.error);
+            sendVoiceTelemetry('rec_onerror', event.error);
+            
             if (event.error === 'no-speech') {
-                // User is pausing or hasn't spoken yet - continue listening smoothly
+                // Temporary pause - do not abort
                 return;
             }
-            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                updateVoiceUI(true, "Microphone permission required. Please allow mic access in your browser bar.");
-                setTimeout(() => stopVoiceSearch(false), 3500);
-                return;
+
+            lastVoiceError = event.error;
+            stopVisualWaveform();
+            isListening = false;
+
+            const banner = document.getElementById('voice-status-banner');
+            const bannerText = document.getElementById('voice-status-text');
+            const micIcon = document.getElementById('mic-icon');
+            if (micIcon) {
+                micIcon.className = "fa-solid fa-microphone";
+                micIcon.style.color = "var(--accent-rose)";
             }
-            if (event.error === 'audio-capture') {
-                updateVoiceUI(true, "Microphone device busy or unavailable.");
-                setTimeout(() => stopVoiceSearch(false), 2500);
-                return;
+
+            let msg = '';
+            if (event.error === 'network') {
+                msg = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--accent-rose);"></i> <strong>Google Speech Offline (Network Error):</strong> Browser could not connect to cloud speech recognition. <br><span style="font-size:12px;opacity:0.95;">💡 <strong>Local Dictation:</strong> Press <kbd style="background:rgba(255,255,255,0.15);padding:2px 6px;border-radius:4px;border:1px solid rgba(255,255,255,0.3);font-weight:700;">Win + H</kbd> on your keyboard to dictate offline via Windows!</span>';
+            } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                msg = '<i class="fa-solid fa-microphone-slash" style="color:var(--accent-rose);"></i> <strong>Microphone Blocked:</strong> Click the lock/tune icon in the browser address bar and enable <strong>Microphone</strong> permissions.';
+            } else if (event.error === 'audio-capture') {
+                msg = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--accent-amber);"></i> <strong>No Mic Found:</strong> Check that your microphone is plugged in and enabled in Windows Sound Settings.';
+            } else {
+                msg = '<i class="fa-solid fa-circle-exclamation" style="color:var(--accent-rose);"></i> <strong>Speech Error:</strong> ' + event.error + ' — You can also press <kbd style="background:rgba(255,255,255,0.15);padding:2px 6px;border-radius:4px;">Win + H</kbd> to type by voice.';
             }
-            // For other non-fatal errors, clean up
-            stopVoiceSearch(false);
+
+            if (banner && bannerText) {
+                banner.style.display = 'block';
+                banner.style.background = 'rgba(244, 63, 94, 0.15)';
+                banner.style.border = '1px solid rgba(244, 63, 94, 0.4)';
+                banner.style.color = '#fecdd3';
+                bannerText.innerHTML = msg;
+            }
+
+            clearTimeout(errorDisplayTimeout);
+            errorDisplayTimeout = setTimeout(() => {
+                if (banner && !isListening) {
+                    banner.style.display = 'none';
+                    if (micIcon) micIcon.style.color = '';
+                }
+            }, 7000);
         };
 
         rec.onend = function() {
-            // If the recognizer naturally concluded while still in listening state
+            sendVoiceTelemetry('rec_onend', lastVoiceError || 'clean_end', 'hasSpoken=' + hasSpoken);
+            
+            // If an error occurred, do NOT let onend hide the banner!
+            if (lastVoiceError) {
+                return;
+            }
+
             if (isListening) {
+                isListening = false;
+                stopVisualWaveform();
                 const queryInput = document.getElementById('query-input');
                 const hasText = queryInput && queryInput.value.trim().length > 0;
-                stopVoiceSearch(hasText);
+                
+                if (hasText) {
+                    updateVoiceUI(false, "");
+                    const form = document.getElementById('qa-form');
+                    if (form) {
+                        form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true }));
+                    }
+                } else {
+                    updateVoiceUI(true, 'No speech detected. Press <kbd style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;">Win + H</kbd> to dictate directly.');
+                    clearTimeout(errorDisplayTimeout);
+                    errorDisplayTimeout = setTimeout(() => {
+                        updateVoiceUI(false, "");
+                    }, 3500);
+                }
             }
         };
 
@@ -1947,14 +2015,11 @@
 
         function animateWave() {
             if (!isListening) return;
-            // Smoothly approach target level
             waveLevel += (targetLevel - waveLevel) * 0.15;
             
-            // Add subtle ambient oscillation when idling
             if (targetLevel <= 25) {
                 targetLevel = 14 + Math.sin(Date.now() / 200) * 8;
             } else {
-                // Decay back towards idle after voice burst
                 targetLevel += (18 - targetLevel) * 0.05;
             }
 
@@ -1968,7 +2033,7 @@
     }
 
     function pulseWaveformActive() {
-        targetLevel = 60 + Math.random() * 35; // Voice burst 60%-95%
+        targetLevel = 60 + Math.random() * 35;
     }
 
     function stopVisualWaveform() {
@@ -2010,15 +2075,18 @@
         const queryInput = document.getElementById('query-input');
         if (queryInput) queryInput.focus();
 
+        sendVoiceTelemetry('toggle_clicked', '', 'isListening=' + isListening);
+
         if (isListening) {
-            // Second click: user finishes speaking and requests submit
             const hasText = queryInput && queryInput.value.trim().length > 0;
             stopVoiceSearch(hasText);
             return;
         }
 
         clearTimeout(silenceTimer);
-        // Always instantiate a clean, fresh SpeechRecognition session
+        clearTimeout(errorDisplayTimeout);
+        lastVoiceError = null;
+
         recognition = initSpeechRecognition();
 
         if (recognition) {
@@ -2026,14 +2094,14 @@
                 recognition.start();
             } catch(e) {
                 console.error("Speech recognition start failed:", e);
+                sendVoiceTelemetry('rec_start_exception', e.message);
                 stopVoiceSearch(false);
             }
         } else {
-            // Fallback for browsers without Web Speech API
-            updateVoiceUI(true, "Browser speech recognition unavailable. Please use Google Chrome or Microsoft Edge.");
+            updateVoiceUI(true, 'Browser speech recognition unavailable. Press <kbd style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;">Win + H</kbd> to dictate by voice.');
             setTimeout(() => {
                 updateVoiceUI(false, "");
-            }, 4000);
+            }, 5000);
         }
     }
 

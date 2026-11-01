@@ -1644,6 +1644,15 @@ def stop_voice_typing():
     return jsonify({"status": "success", "message": "Voice typing stopped"})
 
 
+@app.route('/api/voice_debug', methods=['POST'])
+@login_required
+def voice_debug():
+    """Capture browser voice diagnostic telemetry for real-time debugging."""
+    payload = request.get_json(silent=True) or {}
+    print(f"[VOICE TELEMETRY] User={current_user.username} Event={payload.get('event')} Error={payload.get('error')} Info={payload.get('info')}", flush=True)
+    return jsonify({"status": "ok"})
+
+
 # =========================================================================
 # Issue Resolving & Support Ticket Routes
 # =========================================================================
