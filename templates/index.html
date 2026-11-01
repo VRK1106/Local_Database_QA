@@ -1514,8 +1514,8 @@
         answerCard.style.display = "block";
         answerTextDiv.innerHTML = '<span class="cursor-blink"><i class="fa-solid fa-bolt" style="color: var(--accent-cyan); margin-right: 6px;"></i>Retrieving verified placement intelligence...</span>';
         answerMeta.innerHTML = '';
-        citationsContainer.style.display = "none";
-        citationList.innerHTML = '';
+        if (citationsContainer) citationsContainer.style.display = "none";
+        if (citationList) citationList.innerHTML = '';
 
         const startTime = performance.now();
         let accumulatedMarkdown = "";
