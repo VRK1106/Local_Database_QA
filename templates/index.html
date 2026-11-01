@@ -1842,114 +1842,143 @@
         }
     }
 
-    // Voice Query Automation Pipeline (HTML5 Web Speech API + Audio Volume Visualizer)
+    // Voice Query Automation Pipeline (HTML5 Web Speech API + Audio Activity Waveform)
     let recognition = null;
     let isListening = false;
-    let audioContext = null;
-    let analyser = null;
-    let micStream = null;
+    let silenceTimer = null;
     let animFrameId = null;
+    let hasSpoken = false;
 
     function initSpeechRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) return null;
         
         const rec = new SpeechRecognition();
-        rec.continuous = false;
+        rec.continuous = true;
         rec.interimResults = true;
         rec.lang = 'en-US';
 
+        let finalTranscript = '';
+
         rec.onstart = function() {
             isListening = true;
+            hasSpoken = false;
+            finalTranscript = '';
             updateVoiceUI(true, "Listening to your voice... Speak your question.");
-            startVolumeMeter();
+            startVisualWaveform();
         };
 
         rec.onresult = function(event) {
             let interimTranscript = '';
-            let finalTranscript = '';
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
+                    finalTranscript += event.results[i][0].transcript + ' ';
                 } else {
                     interimTranscript += event.results[i][0].transcript;
                 }
             }
+            
+            const currentText = (finalTranscript + interimTranscript).trim();
             const queryInput = document.getElementById('query-input');
-            if (queryInput) {
-                queryInput.value = finalTranscript || interimTranscript;
+            if (queryInput && currentText) {
+                queryInput.value = currentText;
+                hasSpoken = true;
             }
+
             const bannerText = document.getElementById('voice-status-text');
-            if (bannerText && (finalTranscript || interimTranscript)) {
-                bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>Transcribing:</strong> ' + (finalTranscript || interimTranscript);
+            if (bannerText && currentText) {
+                bannerText.innerHTML = '<i class="fa-solid fa-microphone-lines fa-bounce"></i> <strong>Hearing:</strong> ' + currentText;
+            }
+
+            // Burst waveform when speech tokens arrive
+            pulseWaveformActive();
+
+            // Auto-submit after 2.5 seconds of silence once speech has been detected
+            clearTimeout(silenceTimer);
+            if (hasSpoken) {
+                silenceTimer = setTimeout(() => {
+                    if (isListening) {
+                        const inputVal = queryInput ? queryInput.value.trim() : '';
+                        stopVoiceSearch(inputVal.length > 0);
+                    }
+                }, 2500);
             }
         };
 
         rec.onerror = function(event) {
-            console.warn("Speech recognition error:", event.error);
-            stopVoiceSearch();
+            console.warn("Speech recognition event:", event.error);
+            if (event.error === 'no-speech') {
+                // User is pausing or hasn't spoken yet - continue listening smoothly
+                return;
+            }
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                updateVoiceUI(true, "Microphone permission required. Please allow mic access in your browser bar.");
+                setTimeout(() => stopVoiceSearch(false), 3500);
+                return;
+            }
+            if (event.error === 'audio-capture') {
+                updateVoiceUI(true, "Microphone device busy or unavailable.");
+                setTimeout(() => stopVoiceSearch(false), 2500);
+                return;
+            }
+            // For other non-fatal errors, clean up
+            stopVoiceSearch(false);
         };
 
         rec.onend = function() {
-            stopVoiceSearch();
-            const queryInput = document.getElementById('query-input');
-            if (queryInput && queryInput.value.trim() !== '') {
-                const form = document.getElementById('qa-form');
-                if (form) {
-                    form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true }));
-                }
+            // If the recognizer naturally concluded while still in listening state
+            if (isListening) {
+                const queryInput = document.getElementById('query-input');
+                const hasText = queryInput && queryInput.value.trim().length > 0;
+                stopVoiceSearch(hasText);
             }
         };
 
         return rec;
     }
 
-    async function startVolumeMeter() {
-        try {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-            micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioContext.createAnalyser();
-            const source = audioContext.createMediaStreamSource(micStream);
-            source.connect(analyser);
-            analyser.fftSize = 64;
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let waveLevel = 15;
+    let targetLevel = 15;
 
-            function updateMeter() {
-                if (!isListening) return;
-                analyser.getByteFrequencyData(dataArray);
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-                let avg = sum / dataArray.length;
-                let pct = Math.min(100, Math.round((avg / 128) * 100));
-                
-                const bar = document.getElementById('mic-volume-bar');
-                const val = document.getElementById('volume-val');
-                if (bar) bar.style.width = pct + '%';
-                if (val) val.textContent = `Mic Input: ${pct}%`;
-                
-                animFrameId = requestAnimationFrame(updateMeter);
+    function startVisualWaveform() {
+        cancelAnimationFrame(animFrameId);
+        const bar = document.getElementById('mic-volume-bar');
+        const val = document.getElementById('volume-val');
+
+        function animateWave() {
+            if (!isListening) return;
+            // Smoothly approach target level
+            waveLevel += (targetLevel - waveLevel) * 0.15;
+            
+            // Add subtle ambient oscillation when idling
+            if (targetLevel <= 25) {
+                targetLevel = 14 + Math.sin(Date.now() / 200) * 8;
+            } else {
+                // Decay back towards idle after voice burst
+                targetLevel += (18 - targetLevel) * 0.05;
             }
-            updateMeter();
-        } catch(e) {
-            // Audio meter optional
+
+            const pct = Math.round(Math.max(5, Math.min(100, waveLevel)));
+            if (bar) bar.style.width = pct + '%';
+            if (val) val.textContent = `Mic Input: ${pct}%`;
+
+            animFrameId = requestAnimationFrame(animateWave);
         }
+        animateWave();
     }
 
-    function stopVolumeMeter() {
-        if (animFrameId) cancelAnimationFrame(animFrameId);
-        if (micStream) {
-            micStream.getTracks().forEach(t => t.stop());
-            micStream = null;
-        }
-        if (audioContext && audioContext.state !== 'closed') {
-            try { audioContext.close(); } catch(e) {}
-            audioContext = null;
-        }
+    function pulseWaveformActive() {
+        targetLevel = 60 + Math.random() * 35; // Voice burst 60%-95%
+    }
+
+    function stopVisualWaveform() {
+        cancelAnimationFrame(animFrameId);
         const bar = document.getElementById('mic-volume-bar');
         const val = document.getElementById('volume-val');
         if (bar) bar.style.width = '0%';
         if (val) val.textContent = 'Mic Input: 0%';
+        waveLevel = 0;
+        targetLevel = 0;
     }
 
     function updateVoiceUI(active, text) {
@@ -1982,37 +2011,56 @@
         if (queryInput) queryInput.focus();
 
         if (isListening) {
-            if (recognition) recognition.stop();
-            stopVoiceSearch();
+            // Second click: user finishes speaking and requests submit
+            const hasText = queryInput && queryInput.value.trim().length > 0;
+            stopVoiceSearch(hasText);
             return;
         }
 
-        if (!recognition) {
-            recognition = initSpeechRecognition();
-        }
+        clearTimeout(silenceTimer);
+        // Always instantiate a clean, fresh SpeechRecognition session
+        recognition = initSpeechRecognition();
 
         if (recognition) {
             try {
                 recognition.start();
             } catch(e) {
-                console.error("Speech recognition error:", e);
-                stopVoiceSearch();
+                console.error("Speech recognition start failed:", e);
+                stopVoiceSearch(false);
             }
         } else {
             // Fallback for browsers without Web Speech API
-            updateVoiceUI(true, "Offline Dictation mode active. Speak now...");
-            fetch('/api/trigger_voice_typing').catch(() => {});
+            updateVoiceUI(true, "Browser speech recognition unavailable. Please use Google Chrome or Microsoft Edge.");
             setTimeout(() => {
                 updateVoiceUI(false, "");
-            }, 5000);
+            }, 4000);
         }
     }
 
-    function stopVoiceSearch() {
+    function stopVoiceSearch(submitIfText = false) {
         isListening = false;
+        clearTimeout(silenceTimer);
+        stopVisualWaveform();
         updateVoiceUI(false, "");
-        stopVolumeMeter();
+
+        if (recognition) {
+            try {
+                recognition.stop();
+            } catch(e) {}
+            recognition = null;
+        }
+
         fetch('/api/stop_voice_typing').catch(() => {});
+
+        if (submitIfText) {
+            const queryInput = document.getElementById('query-input');
+            if (queryInput && queryInput.value.trim().length > 0) {
+                const form = document.getElementById('qa-form');
+                if (form) {
+                    form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true }));
+                }
+            }
+        }
     }
 
     // Quick Question Suggestion Dispatcher
